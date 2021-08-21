@@ -472,3 +472,44 @@ class BCE_loss(torch.nn.Module):
         # Return loss
         return loss
 
+
+class Dice_loss(torch.nn.Module):
+    def __init__(self, reduction="mean") -> None:
+        """Dice loss module
+
+        Parameters
+        ----------
+        reduction : str or None, optional
+            reduction mode used, "sum" or "mean" (or None for no reductin), by default "mean"
+        """
+        super().__init__()
+        # Check reduction parameter
+        if reduction not in [None, "mean", "sum"]:
+            raise ValueError('reduction must be either "mean" or "sum"')
+
+    def forward(self, target, prediction, smooth=1):
+        """ Returns the Sørensen–Dice coefficient loss between target and prediction
+
+        Args:
+            target (torch.tensor): Target to calcualte DSC against
+            prediction (torch.tensor): Prediction being assessed
+            smooth (int, optional): Smoothing factor of DSC. Defaults to 1.
+
+        Returns:
+            [type]: [description]
+        """
+
+        # Flatten tensors
+        target = target.view(-1)
+        prediction = prediction.view(-1)
+
+        # Calculate intersection
+        intersection = (target * prediction).sum()
+
+        # Calculate loss
+        loss = 1 - (2.0 * intersection + smooth) / (
+            target.sum() + prediction.sum() + smooth
+        )
+
+        # Return loss
+        return loss
