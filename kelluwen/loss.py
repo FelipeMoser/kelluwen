@@ -486,6 +486,7 @@ class Dice_loss(torch.nn.Module):
         # Check reduction parameter
         if reduction not in [None, "mean", "sum"]:
             raise ValueError('reduction must be either "mean" or "sum"')
+        self.reduction = reduction
 
     def forward(self, target, prediction, smooth=1):
         """ Returns the Sørensen–Dice coefficient loss between target and prediction
@@ -496,12 +497,12 @@ class Dice_loss(torch.nn.Module):
             smooth (int, optional): Smoothing factor of DSC. Defaults to 1.
 
         Returns:
-            [type]: [description]
+            torch.Tensor: Dice loss
         """
 
         # Flatten tensors
-        target = target.view(-1)
-        prediction = prediction.view(-1)
+        target = target.view(target.shape[0], -1)
+        prediction = prediction.view(prediction.shape[0], -1)
 
         # Calculate intersection
         intersection = (target * prediction).sum()
@@ -510,6 +511,10 @@ class Dice_loss(torch.nn.Module):
         loss = 1 - (2.0 * intersection + smooth) / (
             target.sum() + prediction.sum() + smooth
         )
-
+        # Reduce loss
+        if self.reduction == "mean":
+            loss = loss.mean()
+        elif self.reduction == "sum":
+            loss = loss.sum()
         # Return loss
         return loss
