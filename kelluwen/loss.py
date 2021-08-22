@@ -505,11 +505,11 @@ class Dice_loss(torch.nn.Module):
         prediction = prediction.view(prediction.shape[0], -1)
 
         # Calculate intersection
-        intersection = (target * prediction).sum()
+        intersection = (target * prediction).sum(-1)
 
         # Calculate loss
         loss = 1 - (2.0 * intersection + smooth) / (
-            target.sum() + prediction.sum() + smooth
+            target.sum(-1) + prediction.sum(-1) + smooth
         )
         # Reduce loss
         if self.reduction == "mean":
