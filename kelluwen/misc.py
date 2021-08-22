@@ -180,6 +180,11 @@ def get_midplanes(input, norm=False):
         tensor containing 3D volume, must have 3, 4, or 5 dimensions
     normalise : bool
         determines wether the midplanes are normalised or not
+    
+    Returns
+    -------
+    list
+        midplanes of tensor
     """
     # Check input parameter
     if not isinstance(input, torch.Tensor):
@@ -221,6 +226,7 @@ def normalise(input):
     ----------
     input : torch.Tensor
         tensor to be normalised
+        
     Returns
     -------
     torch.Tensor
