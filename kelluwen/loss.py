@@ -572,7 +572,7 @@ class Pearson_loss(torch.nn.Module):
             raise ValueError("prediction must same shape as target")
         # Check mask parameter
         if mask is not None:
-            if not isinstance(mask, torch.BoolTensor):
+            if not isinstance(mask, (torch.BoolTensor, torch.cuda.BoolTensor)):
                 raise TypeError("mask must be the of type torch.BoolTensor")
             elif mask.shape != target.shape:
                 raise ValueError("mask must have the same shape as target")
