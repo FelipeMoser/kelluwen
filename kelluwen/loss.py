@@ -1,7 +1,7 @@
 import torch.nn
 import torch
 from .misc import gaussian_kernel
-from .metrics import ssim
+from .metrics import ssim, pearson_correlation_coefficient
 
 
 class SSIM_loss(torch.nn.Module):
@@ -518,3 +518,72 @@ class Dice_loss(torch.nn.Module):
             loss = loss.sum()
         # Return loss
         return loss
+
+
+class Pearson_loss(torch.nn.Module):
+    def __init__(self, reduction="mean", device=torch.device("cuda"),) -> None:
+        """Pearson Correlation Coefficient loss module
+
+        Parameters
+        ----------
+        reduction : str or None, optional
+            reduction mode used, "sum" or "mean" (or None for no reductin), by default "mean"
+        device: torch.device
+            device on which the kernel is loaded
+        """
+        super().__init__()
+        # Check reduction parameter
+        if reduction not in [None, "mean", "sum"]:
+            raise ValueError('reduction must be either "mean", "sum" or None')
+
+        # Store settings
+        self.reduction = reduction
+
+    def forward(self, target, prediction, mask=None):
+        """Returns Pearson Correlation Coefficient loss between target and prediction
+
+        Parameters
+        ----------
+        target : torch.Tensor
+            target tensor of shape (B, C, *) where * is one, two, or three spatial dimensions
+        prediction : torch.Tensor
+            prediction tensor of shape target.shape 
+        weights : torch.Tensor, optional
+            weights tensor of shape target.shape used to weight the loss, by default None
+        mask: torch.bool, optional
+            mask tensor of shape (B, C, *) used to select the parts of the target/prediction that will be generate the loss
+
+        Returns
+        -------
+        torch.Tensor
+            Pearson Correlation Coefficient loss between target and prediction
+        """
+        # Check target parameter
+        if not isinstance(target, torch.Tensor):
+            raise TypeError("target must be a tensor")
+        elif len(target.shape) < 3 or len(target.shape) > 5:
+            raise ValueError(
+                "target must be of shape (B, C, *) where * is one, two, or three spatial dimensions"
+            )
+        # Check prediction parameter
+        if type(prediction) != type(target):
+            raise TypeError("prediction must be the same type as target")
+        elif prediction.shape != target.shape:
+            raise ValueError("prediction must same shape as target")
+        # Check mask parameter
+        if mask is not None:
+            if not isinstance(mask, torch.BoolTensor):
+                raise TypeError("mask must be the of type torch.BoolTensor")
+            elif mask.shape != target.shape:
+                raise ValueError("mask must have the same shape as target")
+
+        # Obtain Pearson Correlation Coefficient
+        pcc = pearson_correlation_coefficient(
+            target,
+            prediction,
+            mask=mask,
+            batch_reduction=self.reduction,
+            channel_reduction="mean",
+        )
+        # Return Pearson Correlation Coefficient loss
+        return torch.abs(pcc)
