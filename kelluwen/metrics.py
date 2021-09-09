@@ -169,8 +169,9 @@ def ssim(
     # Return channel-wise ssim, luminance, contrast, and structure
     return ssim_index, luminance, contrast, structure
 
+
 def pearson_correlation_coefficient(
-    target, prediction, batch_reduction="mean", channel_reduction="mean"
+    target, prediction, mask=None, batch_reduction="mean", channel_reduction="mean"
 ):
     """ Returns the Pearson's Correlation Coefficient between target and prediction
 
@@ -180,6 +181,8 @@ def pearson_correlation_coefficient(
         target tensor of shape (B, C, *) where * is one, two, or three spatial dimensions
     prediction : torch.Tensor
         prediction tensor of shape (B, C, *) where * is one, two, or three spatial dimensions
+    mask: torch.bool, optional
+            mask tensor of shape (B, C, *) where * is one, two, or three spatial dimensions, used to select the parts of the target/prediction that will be generate the loss, by default None
     batch_reduction : (None, "mean", "sum"), optional
         reduction mode used along batch dimension, "sum" or "mean", or None for no reduction, by default "mean"
     channel_reduction : (None, "mean", "sum"), optional
@@ -208,34 +211,72 @@ def pearson_correlation_coefficient(
     # Check channel_reduction parameter
     if channel_reduction not in [None, "sum", "mean"]:
         raise ValueError('channel_reduction must be either None, "mean", or "sum"')
+    # Check mask parameter
+    if mask is not None:
+        if not isinstance(mask, torch.BoolTensor):
+            raise TypeError("mask must be the of type torch.BoolTensor")
+        elif mask.shape != target.shape:
+            raise ValueError("mask must have the same shape as target")
 
     # Flatten the inputs
     target = target.flatten(2)
     prediction = prediction.flatten(2)
 
-    # Calculate the means
-    mu_tar = target.mean(2, keepdim=True)
-    mu_pred = prediction.mean(2, keepdim=True)
+    # Calculate masked Pearson's Correlation Coefficient if required
+    if mask is not None:
+        mask = mask.flatten(2)
+        pcc = torch.zeros((target.shape[0], target.shape[1], 1))
+        for batch in range(target.shape[0]):
+            for channel in range(target.shape[1]):
+                # Apply mask
+                masked_tar = target[batch, channel][mask[batch, channel]]
+                masked_pred = prediction[batch, channel][mask[batch, channel]]
 
-    # Calcualte the standard deviations
-    std_tar = target.std(2, keepdim=True)
-    std_pred = prediction.std(2, keepdim=True)
+                # Calculate the means of the masked target and prediction
+                masked_mu_tar = masked_tar.mean()
+                masked_mu_pred = masked_pred.mean()
 
-    # Calculate the covariances
-    cov_xy = torch.sum((target - mu_tar) * (prediction - mu_pred), 2, keepdim=True) / (target.shape[-1]-1)
-    
-    # Calculate Pearson's Correlation Coefficient
-    pcc = cov_xy / (std_tar * std_pred)
+                # Calculate the standard deviations of the masked target and prediction
+                masked_std_tar = masked_tar.std()
+                masked_std_pred = masked_pred.std()
+
+                # Calculate the covariance of the masked target and prediction
+                masked_cov_tar_pred = torch.sum(
+                    (masked_tar - masked_mu_tar) * (masked_pred - masked_mu_pred)
+                ) / (masked_tar.shape[-1] - 1)
+
+                # Calculate Pearson's Correlation Coefficient of the masked target and prediction
+                masked_pcc = masked_cov_tar_pred / (masked_std_tar * masked_std_pred)
+
+                # Store the masked Pearson's Correlation Coefficient
+                pcc[batch, channel] = masked_pcc
+
+    else:
+        # Calculate the means
+        mu_tar = target.mean(2, keepdim=True)
+        mu_pred = prediction.mean(2, keepdim=True)
+
+        # Calcualte the standard deviations
+        std_tar = target.std(2, keepdim=True)
+        std_pred = prediction.std(2, keepdim=True)
+
+        # Calculate the covariances
+        cov_tar_pred = torch.sum(
+            (target - mu_tar) * (prediction - mu_pred), 2, keepdim=True
+        ) / (target.shape[-1] - 1)
+
+        # Calculate Pearson's Correlation Coefficient
+        pcc = cov_tar_pred / (std_tar * std_pred)
 
     # Reduce channels if required
     if channel_reduction == "sum":
         pcc = pcc.sum(1)
     elif channel_reduction == "mean":
-        pcc = pcc.sum(1)
+        pcc = pcc.mean(1)
 
     # Reduce batch if required
     if batch_reduction == "sum":
         pcc = pcc.sum(0)
     elif batch_reduction == "mean":
-        pcc = pcc.sum(0)
+        pcc = pcc.mean(0)
     return pcc
