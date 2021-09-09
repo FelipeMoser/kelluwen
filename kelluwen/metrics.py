@@ -169,3 +169,73 @@ def ssim(
     # Return channel-wise ssim, luminance, contrast, and structure
     return ssim_index, luminance, contrast, structure
 
+def pearson_correlation_coefficient(
+    target, prediction, batch_reduction="mean", channel_reduction="mean"
+):
+    """ Returns the Pearson's Correlation Coefficient between target and prediction
+
+    Parameters
+    ----------
+    target : torch.Tensor
+        target tensor of shape (B, C, *) where * is one, two, or three spatial dimensions
+    prediction : torch.Tensor
+        prediction tensor of shape (B, C, *) where * is one, two, or three spatial dimensions
+    batch_reduction : (None, "mean", "sum"), optional
+        reduction mode used along batch dimension, "sum" or "mean", or None for no reduction, by default "mean"
+    channel_reduction : (None, "mean", "sum"), optional
+        reduction mode used along channel dimension, "sum" or "mean", or None for no reduction, by default "mean"
+
+    Returns
+    -------
+    torch.Tensor
+        Pearson's Correlation Coefficient between target and prediction
+    """
+    # Check target parameter
+    if not isinstance(target, torch.Tensor):
+        raise TypeError("target must be a tensor")
+    elif len(target.shape) < 3 or len(target.shape) > 5:
+        raise ValueError(
+            "target must be of shape (B, C, *) where * is one, two, or three spatial dimensions"
+        )
+    # Check prediction parameter
+    if type(prediction) != type(target):
+        raise TypeError("prediction must be the same type as target")
+    elif prediction.shape != target.shape:
+        raise ValueError("prediction must same shape as target")
+    # Check batch_reduction parameter
+    if batch_reduction not in [None, "sum", "mean"]:
+        raise ValueError('batch_reduction must be either None, "mean", or "sum"')
+    # Check channel_reduction parameter
+    if channel_reduction not in [None, "sum", "mean"]:
+        raise ValueError('channel_reduction must be either None, "mean", or "sum"')
+
+    # Flatten the inputs
+    target = target.flatten(2)
+    prediction = prediction.flatten(2)
+
+    # Calculate the means
+    mu_tar = target.mean(2, keepdim=True)
+    mu_pred = prediction.mean(2, keepdim=True)
+
+    # Calcualte the standard deviations
+    std_tar = target.std(2, keepdim=True)
+    std_pred = prediction.std(2, keepdim=True)
+
+    # Calculate the covariances
+    cov_xy = torch.sum((target - mu_tar) * (prediction - mu_pred), 2, keepdim=True) / (target.shape[-1]-1)
+    
+    # Calculate Pearson's Correlation Coefficient
+    pcc = cov_xy / (std_tar * std_pred)
+
+    # Reduce channels if required
+    if channel_reduction == "sum":
+        pcc = pcc.sum(1)
+    elif channel_reduction == "mean":
+        pcc = pcc.sum(1)
+
+    # Reduce batch if required
+    if batch_reduction == "sum":
+        pcc = pcc.sum(0)
+    elif batch_reduction == "mean":
+        pcc = pcc.sum(0)
+    return pcc
