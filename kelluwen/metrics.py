@@ -213,7 +213,7 @@ def pearson_correlation_coefficient(
         raise ValueError('channel_reduction must be either None, "mean", or "sum"')
     # Check mask parameter
     if mask is not None:
-        if not isinstance(mask, torch.BoolTensor):
+        if not isinstance(mask, (torch.cuda.BoolTensor, torch.BoolTensor)):
             raise TypeError("mask must be the of type torch.BoolTensor")
         elif mask.shape != target.shape:
             raise ValueError("mask must have the same shape as target")
@@ -225,7 +225,7 @@ def pearson_correlation_coefficient(
     # Calculate masked Pearson's Correlation Coefficient if required
     if mask is not None:
         mask = mask.flatten(2)
-        pcc = torch.zeros((target.shape[0], target.shape[1], 1))
+        pcc = torch.zeros((target.shape[0], target.shape[1], 1)).to(target)
         for batch in range(target.shape[0]):
             for channel in range(target.shape[1]):
                 # Apply mask
