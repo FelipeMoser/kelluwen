@@ -171,7 +171,7 @@ def show_midplanes(input, title=None, norm=False, show=True):
         plt.show()
 
 
-def get_midplanes(input, norm=False):
+def get_midplanes(input, norm=False, pad=False):
     """Returns the midplanes of a 3D volume
 
     Parameters
@@ -180,6 +180,8 @@ def get_midplanes(input, norm=False):
         tensor containing 3D volume, must have 3, 4, or 5 dimensions
     normalise : bool
         determines wether the midplanes are normalised or not
+    pad : bool
+        determines wither the midplanes are centre-padded to the largest dimension or not
     
     Returns
     -------
@@ -194,6 +196,10 @@ def get_midplanes(input, norm=False):
     # Check normalise parameter
     if not isinstance(norm, bool):
         raise TypeError("normalise must be a boolean")
+
+    # Check pad parameter
+    if not isinstance(pad, bool):
+        raise TypeError("pad must be a boolean")
 
     # Remove non-spatial dimensions
     if len(input.shape) == 5:
@@ -216,6 +222,13 @@ def get_midplanes(input, norm=False):
         xy = normalise(xy)
         xz = normalise(xz)
         yz = normalise(yz)
+
+    # Centre-pad if required
+    if pad:
+        xy = centre_pad(xy, size=[max(shape)] * 2)
+        xz = centre_pad(xz, size=[max(shape)] * 2)
+        yz = centre_pad(yz, size=[max(shape)] * 2)
+
     return xy, xz, yz
 
 
@@ -414,4 +427,89 @@ def centre_crop(input, size):
             crop_left[3] : -crop_rigth[3],
             crop_left[4] : -crop_rigth[4],
         ]
+
+
+def centre_pad(input, size, value=0):
+    """Returns centre-padded tensor
+
+    Parameters
+    ----------
+    input : torch.Tensor
+        tensor to be padded
+    size : int or list or tuple
+        tensor size after padding
+    value: number
+        padding value
+        
+
+    Returns
+    -------
+    torch.Tensor
+        padded tensor
+    """
+    # Check input parameter
+    if not isinstance(input, torch.Tensor):
+        raise TypeError("input must be a tensor")
+    elif not 5 >= len(input.shape) >= 1:
+        raise ValueError("input must have between 1 and 5 dimensions")
+    # Check size parameter
+    if not isinstance(size, (list, tuple)):
+        raise TypeError("size must be a list or tuple of integers")
+    elif any((not isinstance(elem, (int)) for elem in size)):
+        raise TypeError("size must be a list or tuple of integers")
+    if len(size) != len(input.shape):
+        raise ValueError(
+            "size must have the same number of elements as dimensions in input"
+        )
+    if any([(x - y) > 0 for (x, y) in zip(input.shape, size)]):
+        raise ValueError(
+            "size must be larger or equal to input shape in all dimensions"
+        )
+
+    # Create empty padded tensor
+    padded = torch.ones(size=size) * value
+
+    # Calculate difference
+    pad_before = [(y - x) // 2 for (x, y) in zip(input.shape, size)]
+
+    # Pad input
+    if len(input.shape) == 1:
+        padded[pad_before[0] : pad_before[0] + input.shape[0],] = input
+    elif len(input.shape) == 2:
+        padded[
+            pad_before[0] : pad_before[0] + input.shape[0],
+            pad_before[1] : pad_before[1] + input.shape[1],
+        ] = input
+    elif len(input.shape) == 3:
+        padded[
+            pad_before[0] : pad_before[0] + input.shape[0],
+            pad_before[1] : pad_before[1] + input.shape[1],
+            pad_before[2] : pad_before[2] + input.shape[2],
+        ] = input
+    elif len(input.shape) == 4:
+        padded[
+            pad_before[0] : pad_before[0] + input.shape[0],
+            pad_before[1] : pad_before[1] + input.shape[1],
+            pad_before[2] : pad_before[2] + input.shape[2],
+            pad_before[3] : pad_before[3] + input.shape[3],
+        ] = input
+    else:
+        padded[
+            pad_before[0] : pad_before[0] + input.shape[0],
+            pad_before[1] : pad_before[1] + input.shape[1],
+            pad_before[2] : pad_before[2] + input.shape[2],
+            pad_before[3] : pad_before[3] + input.shape[3],
+            pad_before[4] : pad_before[4] + input.shape[4],
+        ] = input
+
+    # Return centre-padded input
+    return padded
+
+
+if __name__ == "__main__":
+    x = torch.rand(10, 3, 40, 50, 60)
+
+    y = centre_pad(x, (10, 3, 100, 100, 100), value=1)
+    show_midplanes(x, title="Org", show=False)
+    show_midplanes(y, title="Pad")
 
