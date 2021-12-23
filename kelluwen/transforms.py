@@ -358,24 +358,25 @@ def anisotropic_diffusion_3d(
 
     # Begin filtering
     for _ in range(iterations):
+        flux = torch.zeros_like(input)
         for idx_i, d_i, idx_0 in zip(index_i, dist_i, index_0):
             xi, yi, zi = idx_i
             x0, y0, z0 = idx_0
 
+            
             # Calculate difference
             diff = (
                 input[:, :, xi[0] : xi[1], yi[0] : yi[1], zi[0] : zi[1]]
                 - input[:, :, x0[0] : x0[1], y0[0] : y0[1], z0[0] : z0[1]]
             )
-
+            
             # Calculate the flow contribution
             if mode == 0:
                 flow = delta_t * torch.exp(-((diff / k) ** 2)) * diff / d_i
             else:
                 flow = delta_t * 1 / (1 + (diff / k) ** 2) * diff / d_i
-
             # Update image
-            input[:, :, x0[0] : x0[1], y0[0] : y0[1], z0[0] : z0[1]] += flow
-            input[:, :, xi[0] : xi[1], yi[0] : yi[1], zi[0] : zi[1]] -= flow
-
+            flux[:, :, x0[0] : x0[1], y0[0] : y0[1], z0[0] : z0[1]] += flow
+            flux[:, :, xi[0] : xi[1], yi[0] : yi[1], zi[0] : zi[1]] -= flow
+        input += flux
     return input
