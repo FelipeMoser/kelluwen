@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="kelluwen_development",
+    name="kelluwen",
     version="0.0.1",
     description="Open AI library for research and education.",
     packages=find_packages(),
