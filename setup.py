@@ -19,7 +19,6 @@ setup(
         "Intended Audience :: Developers",
         "Intended Audience :: Education",
         "Intended Audience :: Science/Research",
-        "License :: Attribution-ShareAlike 4.0 International (CC BY-SA 4.0) ",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.6",
         "Topic :: Education",
