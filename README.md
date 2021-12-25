@@ -31,7 +31,7 @@ parameters = dict(parameter_translation=rand(2,3),
 transform = generate_affine(**parameters)
 
 # Apply affine transform to image tensor
-img_transformed = apply_affine(**transform)["image"]
+img_transformed = apply_affine(image=img, **transform)["image"]
 
 
 # Show midplanes of volume. In this example we're using the RAS coordinate system, and we're scaling the features using a min-max method.
