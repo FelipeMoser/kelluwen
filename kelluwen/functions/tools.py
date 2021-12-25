@@ -152,9 +152,9 @@ def show_midplanes(
 
     # Scale features if required
     if type_scaling != None:
-        xy = scale_features(tensor=xy, type_scaling=type_scaling)["tensor"]
-        xz = scale_features(tensor=xz, type_scaling=type_scaling)["tensor"]
-        yz = scale_features(tensor=yz, type_scaling=type_scaling)["tensor"]
+        xy = scale_features(image=xy, type_scaling=type_scaling)["image"]
+        xz = scale_features(image=xz, type_scaling=type_scaling)["image"]
+        yz = scale_features(image=yz, type_scaling=type_scaling)["image"]
 
     # Remove batch and channel dimensions
     xy, xz, yz = xy[0, 0], xz[0, 0], yz[0, 0]
