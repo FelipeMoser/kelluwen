@@ -19,7 +19,7 @@ from torch import rand
 img = rand(2, 3, 100, 100, 100)
 
 # Define parameters for affine transform. These transforms can be independent for each channel. If there is no channel dimension, the same transform will be applied for all channels.
-parameters = dict(parameter_translation=,
+parameters = dict(parameter_translation=rand(2,3),
     parameter_rotation=rand(2,3),
     parameter_scaling=rand(2,3),
     type_rotation="euler_xyz",
