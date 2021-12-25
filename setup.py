@@ -8,7 +8,7 @@ setup(
     version="0.0.1",
     description="Open AI library for research and education.",
     packages=find_packages(),
-    url="https://github.com:FelipeMoser/kelluwen.git",
+    url="https://github.com/felipemoser/kelluwen",
     author="Felipe Moser",
     author_email="felipe.moser@univ.ox.ac.uk",
     install_requires=["torch>=1.10", "nibabel>=3.2", "matplotlib>=3.5"],
