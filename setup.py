@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="kelluwen",
-    version="0.0.2",
+    version="0.0.3",
     description="Open AI library for research and education.",
     packages=find_packages(),
     url="https://github.com/felipemoser/kelluwen",
@@ -13,7 +13,7 @@ setup(
     author_email="felipe.moser@univ.ox.ac.uk",
     install_requires=["torch>=1.10", "nibabel>=3.2", "matplotlib>=3.5"],
     classifiers=[
-        "Development Status :: 2 - Pre-Alpha",
+        "Development Status :: 3 - Alpha",
         "Operating System :: OS Independent",
         "Environment :: GPU :: NVIDIA CUDA",
         "Intended Audience :: Developers",
