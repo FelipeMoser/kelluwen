@@ -630,8 +630,8 @@ def generate_rotation(parameter_rotation, type_rotation="", type_output="dict"):
             i1 = index[type_rotation[6 + i]][1]
             q0 = index[type_rotation[6 + i]][2]
             angle = parameter_rotation[:, :, i]
-            operations[i][:, :, i0, i1] = q0 * tensor(
-                [cos(angle), sin(angle), sin(angle), cos(angle)]
+            operations[i][:, :, i0, i1] = q0 *stack(
+                [cos(angle), sin(angle), sin(angle), cos(angle)], dim=2
             )
 
         # Generate rotation transform
