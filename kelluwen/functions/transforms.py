@@ -271,14 +271,29 @@ def apply_anisotropic(
         return {"image": image}
 
 
-def deconstruct_affine(transform_affine, type_rotation="euler_xyz", type_output="dict"):
+def deconstruct_affine(
+    transform_affine,
+    transform_order="srt",
+    type_rotation="euler_xyz",
+    type_output="dict",
+):
     # Retrieve required variables
+    transform_order = transform_order.lower()
     type_output = type_output.lower()
     type_rotation = type_rotation.lower()
+
+    # Define supported transform orders
+    supported_order = ("trs", "tsr", "rts", "rst", "str", "srt")
 
     # Define supported rotation parameter types
     supported_rotation = ("euler_xyz", "quaternion")
     supported_output = ("dict", "raw")
+
+    # Check that the transform order is supported
+    if transform_order not in supported_order:
+        raise ValueError(
+            f"Unknown transform order '{transform_order}'. Supported transform orders: {supported_order}"
+        )
 
     # Check that the rotation type is supported
     if type_rotation not in supported_rotation:
@@ -310,22 +325,60 @@ def deconstruct_affine(transform_affine, type_rotation="euler_xyz", type_output=
         transform_affine = transform_affine[:, None, :, :]
 
     # Extract scaling parameters
-    scaling = transform_affine[:, :, :-1, :-1].norm(dim=2)
+    if transform_order in ("srt, str, tsr"):
+        parameter_scaling = transform_affine[:, :, :-1, :-1].norm(dim=3)
+    else:
+        parameter_scaling = transform_affine[:, :, :-1, :-1].norm(dim=2)
+
+    # Extract scaling transform
+    transform_scaling = generate_scaling(parameter_scaling, type_output="raw")
+
+    # Extract rotation transform
+    if transform_order in ("srt, str, tsr"):
+        transform_rotation = matmul(transform_scaling.inverse(), transform_affine)
+    else:
+        transform_rotation = matmul(transform_affine, transform_scaling.inverse())
+    transform_rotation[:, :, :-1, -1] = 0
+
+    # Extract translation transform
+    if transform_order == "trs":
+        transform_translation = matmul(
+            transform_affine,
+            matmul(transform_scaling.inverse(), transform_rotation.inverse()),
+        )
+    elif transform_order == "tsr":
+        transform_translation = matmul(
+            transform_affine,
+            matmul(transform_rotation.inverse(), transform_scaling.inverse()),
+        )
+    elif transform_order == "rts":
+        transform_translation = matmul(
+            transform_rotation.inverse(),
+            matmul(transform_affine, transform_scaling.inverse()),
+        )
+    elif transform_order == "rst":
+        transform_translation = matmul(
+            transform_scaling.inverse(),
+            matmul(transform_rotation.inverse(), transform_affine),
+        )
+    elif transform_order == "srt":
+        transform_translation = matmul(
+            transform_rotation.inverse(),
+            matmul(transform_scaling.inverse(), transform_affine),
+        )
+    elif transform_order == "str":
+        transform_translation = matmul(
+            transform_scaling.inverse(),
+            matmul(transform_affine, transform_rotation.inverse()),
+        )
 
     # Extract translation parameters
-    translation = transform_affine[:, :, :-1, -1]
+    parameter_translation = transform_translation[:, :, :-1, -1]
 
-    # Remove translation and scaling to obtain rotation transform
-    transform_rotation = transform_affine[:, :, :-1, :-1]
-    for i in range(transform_rotation.shape[2]):
-        transform_rotation[:, :, :, i] /= scaling[:, :, i]
-
-    # Extract 2D rotation
-    if transform_rotation.shape[2] == 2:
-        rotation = asin(transform_rotation[:, :, 1, 0])
-
-    # Extract 3D rotation
-    else:
+    # Extract rotation parameters
+    if transform_rotation.shape[2] == 2:  # 2D rotation
+        parameter_rotation = asin(transform_rotation[:, :, 1, 0])
+    else:  # 3D rotation
         if type_rotation == "quaternion":
             # Extract quaternions from rotation transform
             trace_transform_rotation = (
@@ -343,28 +396,33 @@ def deconstruct_affine(transform_affine, type_rotation="euler_xyz", type_output=
             q3 = (transform_rotation[:, :, 1, 0] - transform_rotation[:, :, 0, 1]) / (
                 2 * sqrt(1 + trace_transform_rotation)
             )
-            rotation = stack([q0, q1, q2, q3], dim=2)
+            parameter_rotation = stack([q0, q1, q2, q3], dim=2)
 
         elif type_rotation == "euler_xyz":
             # Extract xyz Euler angles from rotation transform
-            alpha = atan2(-transform_affine[:, :, 1, 2], transform_affine[:, :, 2, 2])
-            beta = asin(transform_affine[:, :, 0, 2])
-            gamma = atan2(-transform_affine[:, :, 0, 1], transform_affine[:, :, 0, 0])
-            rotation = stack([alpha, beta, gamma], dim=2)
+            alpha = atan2(
+                -transform_rotation[:, :, 1, 2], transform_rotation[:, :, 2, 2]
+            )
+            beta = asin(transform_rotation[:, :, 0, 2])
+            gamma = atan2(
+                -transform_rotation[:, :, 0, 1], transform_rotation[:, :, 0, 0]
+            )
+            parameter_rotation = stack([alpha, beta, gamma], dim=2)
 
         else:
             raise Exception(
                 f"Rotation type '{type_rotation}' not implemented! Please contact the developers."
             )
+
     # Return deconstruction parameters
     if channel_dimension == False:
-        scaling = scaling[:, 0, :]
-        translation = translation[:, 0, :]
-        rotation = rotation[:, 0, :]
+        parameter_scaling = parameter_scaling[:, 0, :]
+        parameter_translation = parameter_translation[:, 0, :]
+        parameter_rotation = parameter_rotation[:, 0, :]
     return {
-        "parameter_scaling": scaling,
-        "parameter_translation": translation,
-        "parameter_rotation": rotation,
+        "parameter_scaling": parameter_scaling,
+        "parameter_translation": parameter_translation,
+        "parameter_rotation": parameter_rotation,
     }
 
 
@@ -403,7 +461,7 @@ def generate_affine(
     # Define supported transform orders
     supported_order = ("trs", "tsr", "rts", "rst", "str", "srt")
 
-    # Check that the transform resampling is supported
+    # Check that the transform order is supported
     if transform_order not in supported_order:
         raise ValueError(
             f"Unknown transform order '{transform_order}'. Supported transform orders: {supported_order}"
@@ -630,7 +688,7 @@ def generate_rotation(parameter_rotation, type_rotation="", type_output="dict"):
             i1 = index[type_rotation[6 + i]][1]
             q0 = index[type_rotation[6 + i]][2]
             angle = parameter_rotation[:, :, i]
-            operations[i][:, :, i0, i1] = q0 *stack(
+            operations[i][:, :, i0, i1] = q0 * stack(
                 [cos(angle), sin(angle), sin(angle), cos(angle)], dim=2
             )
 
