@@ -1,5 +1,5 @@
 from torch.nn.functional import conv1d, conv2d, conv3d, relu
-from torch import sqrt, sum, cat, bool, BoolTensor, cuda, flatten
+from torch import sqrt, sum, cat, flatten
 from .transforms import generate_kernel
 
 
@@ -33,14 +33,6 @@ def dsc(
                 function, supported_reductions
             )
         )
-
-    # Check that the input is a boolean tensor
-    if not isinstance(image, (BoolTensor, cuda.BoolTensor)):
-        raise TypeError("Input must be a boolean tensor.")
-
-    # Check that the reference is a boolean tensor
-    if not isinstance(image, (BoolTensor, cuda.BoolTensor)):
-        raise TypeError("Reference must be a boolean tensor.")
 
     # Check that the smoothing constant is a number
     if not isinstance(smoothing_constant, (int, float)):
@@ -105,13 +97,6 @@ def iou(
             )
         )
 
-    # Check that the input is a boolean tensor
-    if not isinstance(image, (BoolTensor, cuda.BoolTensor)):
-        raise TypeError("Input must be a boolean tensor.")
-
-    # Check that the reference is a boolean tensor
-    if not isinstance(image, (BoolTensor, cuda.BoolTensor)):
-        raise TypeError("Reference must be a boolean tensor.")
 
     # Check that the smoothing constant is a number
     if not isinstance(smoothing_constant, (int, float)):
