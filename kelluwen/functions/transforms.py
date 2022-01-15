@@ -686,7 +686,7 @@ def generate_rotation(parameter_rotation, type_rotation="", type_output="dict"):
         for i in range(3):
             i0 = index[type_rotation[6 + i]][0]
             i1 = index[type_rotation[6 + i]][1]
-            q0 = index[type_rotation[6 + i]][2]
+            q0 = index[type_rotation[6 + i]][2].to(parameter_rotation.device)
             angle = parameter_rotation[:, :, i]
             operations[i][:, :, i0, i1] = q0 * stack(
                 [cos(angle), sin(angle), sin(angle), cos(angle)], dim=2
