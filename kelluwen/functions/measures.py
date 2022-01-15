@@ -155,19 +155,23 @@ def mae(image, reference, reduction_channel="mean", type_output="dict"):
         )
 
     # Calculate mean absolute error
-    mae = (image - reference).abs().mean(dim=tuple(range(2, image.dim())))
+    if image.dim() > 2:
+        mae = (image - reference).abs().mean(dim=tuple(range(2, image.dim())))
 
-    # Average over channels if required
-    if reduction_channel == "none":
-        pass
-    elif reduction_channel == "mean":
-        mae = mae.mean(dim=1, keepdim=True)
-    elif reduction_channel == "sum":
-        mae = mae.sum(dim=1, keepdim=True)
+        # Average over channels if required
+        if reduction_channel == "none":
+            pass
+        elif reduction_channel == "mean":
+            mae = mae.mean(dim=1, keepdim=True)
+        elif reduction_channel == "sum":
+            mae = mae.sum(dim=1, keepdim=True)
+        else:
+            raise Exception(
+                "Reduction '{}' not implemented! Please contact the developers."
+            )
     else:
-        raise Exception(
-            "Reduction '{}' not implemented! Please contact the developers."
-        )
+        mae = (image - reference).abs().mean(dim=1)
+
 
     # Return results
     if type_output == "raw":
