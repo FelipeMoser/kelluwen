@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="kelluwen",
-    version="0.0.5",
+    version="0.0.6",
     description="Open AI library for research and education.",
     packages=find_packages(),
     url="https://github.com/felipemoser/kelluwen",
