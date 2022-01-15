@@ -601,7 +601,7 @@ def generate_rotation(parameter_rotation, type_rotation="", type_output="dict"):
     if type_rotation == "":
         if parameter_rotation.shape[-1] in (1, 3):
             type_rotation = "euler_xyz"
-        elif parameter_rotation.shape[2] == 4:
+        elif parameter_rotation.shape[-1] == 4:
             type_rotation = "quaternion"
 
     # Define supported output types
