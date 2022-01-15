@@ -40,8 +40,8 @@ def dsc(
 
     # Calculate intersection
     dims = tuple(range(2, image.dim()))
-    intersection = (image * reference).sum(dim=dims)
-    union = image.sum(dim=dims) + reference.sum(dims)
+    intersection = (image * reference).float().sum(dim=dims)
+    union = image.float().sum(dim=dims) + reference.float().sum(dims)
 
     # Calculate dsc
     dsc = (2 * intersection + smoothing_constant) / (union + smoothing_constant)
