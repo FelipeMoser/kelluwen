@@ -144,28 +144,21 @@ def apply_affine(
     coordinates *= mask[:, :, None, :]
 
     # Resample
-    if type_resampling == "nearest":
-        # Sample transformed image
-        if image.dim() == 4:
-            output = image[batch, channel, x.round().long(), y.round().long()]
-        else:
-            output = image[
-                batch, channel, x.round().long(), y.round().long(), z.round().long()
-            ]
+    if type_resampling in ("nearest", "bilinear"):
 
-        # Mask transformed image
-        output *= mask
+        if type_resampling == "nearest":
+            # Prepare indices and weights for readability
+            c0 = lambda x: (x.ceil() - 1).long()
+            c1 = lambda x: x.ceil().long()
+            w0 = lambda x: x.ceil() - x.round()
+            w1 = lambda x: x.round() - (x.ceil() - 1)
 
-        # Reshape transformed image
-        output = output.reshape(shape_output)
-
-    elif type_resampling == "bilinear":
-
-        # Prepare indices and weights for readability
-        c0 = lambda x: (x.ceil() - 1).long()
-        c1 = lambda x: x.ceil().long()
-        w0 = lambda x: x.ceil() - x
-        w1 = lambda x: x - (x.ceil() - 1)
+        elif type_resampling == "bilinear":
+            # Prepare indices and weights for readability
+            c0 = lambda x: (x.ceil() - 1).long()
+            c1 = lambda x: x.ceil().long()
+            w0 = lambda x: x.ceil() - x
+            w1 = lambda x: x - (x.ceil() - 1)
 
         # Sample transformed image
         if image.dim() == 4:
@@ -573,7 +566,8 @@ def generate_scaling(parameter_scaling, type_output="dict"):
 
     # Generate scaling transform
     transform_scaling = eye(
-        parameter_scaling.shape[2] + 1, device=parameter_scaling.device
+        parameter_scaling.shape[2] + 1,
+        device=parameter_scaling.device,
     )[None, None, :].type(parameter_scaling.type())
     transform_scaling = transform_scaling.tile(
         (parameter_scaling.shape[0], parameter_scaling.shape[1], 1, 1)
@@ -762,7 +756,8 @@ def generate_translation(parameter_translation, type_output="dict"):
 
     # Generate translation transform
     transform_translation = eye(
-        parameter_translation.shape[2] + 1, device=parameter_translation.device
+        parameter_translation.shape[2] + 1,
+        device=parameter_translation.device,
     )[None, None, :].type(parameter_translation.type())
     transform_translation = transform_translation.tile(
         (parameter_translation.shape[0], parameter_translation.shape[1], 1, 1)
