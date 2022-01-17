@@ -1,5 +1,5 @@
 from torch.nn.functional import conv1d, conv2d, conv3d, relu
-from torch import sqrt, sum, cat, flatten, where, tensor, zeros
+from torch import sqrt, sum, cat, flatten, where, tensor, zeros, flip
 from .transforms import generate_kernel
 
 
@@ -114,9 +114,7 @@ def cd(
             )
 
     # Calculate distance between centroids
-    cd = sqrt(
-        ((centroid_reference - centroid_image) ** 2).sum(dim=-1)
-    )
+    cd = sqrt(((centroid_reference - centroid_image) ** 2).sum(dim=-1))
 
     # Average over channels if required
     if reduction_channel == "none":
@@ -416,6 +414,78 @@ def pcc(
         return pcc
     else:
         return {"pcc": pcc}
+
+
+def sc(
+    image,
+    reduction_channel="mean",
+    type_output="dict",
+):
+    # Retrieve required variables
+    reduction_channel = reduction_channel.lower()
+    type_output = type_output.lower()
+
+    # Define supported reductions
+    supported_reductions = ("none", "mean", "sum")
+
+    # Define supported output types
+    supported_output = ("dict", "raw")
+
+    # Check that output type is supported
+    if type_output not in supported_output:
+        raise ValueError(
+            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
+        )
+
+    # Check that reduction function is supported
+    if reduction_channel not in supported_reductions:
+        raise ValueError(
+            "Unsupported channel reduction '{}'. Supported reductions: {}.".format(
+                function, supported_reductions
+            )
+        )
+
+    # Check image
+    if image.dim() != 5:
+        raise ValueError(
+            "Unsuported image dimensionality. Currently only image.dim()=5 is supported"
+        )
+
+    # Calculate symmetry coefficient
+    sc_x = dsc(
+        image=image[:, :, : image.shape[2] // 2, :, :],
+        reference=flip(image[:, :, -(image.shape[2] // 2) :, :, :], dims=[2]),
+        reduction_channel="none",
+    )
+    sc_y = dsc(
+        image=image[:, :, :, : image.shape[3] // 2, :],
+        reference=flip(image[:, :, :, -(image.shape[3] // 2) :, :], dims=[3]),
+        reduction_channel="none",
+    )
+    sc_z = dsc(
+        image=image[:, :, :, :, : image.shape[4] // 2],
+        reference=flip(image[:, :, :, :, -(image.shape[4] // 2) :], dims=[4]),
+        reduction_channel="none",
+    )
+    sc = cat([sc_x, sc_y, sc_z], dim=2)
+
+    # Average over channels if required
+    if reduction_channel == "none":
+        pass
+    elif reduction_channel == "mean":
+        sc = sc.mean(dim=1, keepdim=True)
+    elif reduction_channel == "sum":
+        sc = sc.sum(dim=1, keepdim=True)
+    else:
+        raise Exception(
+            f"Reduction '{reduction_channel}' not implemented! Please contact the developers."
+        )
+
+    # Return results
+    if type_output == "raw":
+        return sc
+    else:
+        return {"sc": sc}
 
 
 def ssim(
