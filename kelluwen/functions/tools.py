@@ -146,7 +146,7 @@ def show_midplanes(
         raise TypeError(f"Show must be a boolean, got {type(show)} instead.")
 
     # Get midplanes
-    midplanes = get_midplanes(image)
+    midplanes = get_midplanes(image.detach().cpu())
     keys = ("xy", "xz", "yz")
     xy, xz, yz = [midplanes[x] for x in keys]
 
