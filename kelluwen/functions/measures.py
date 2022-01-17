@@ -470,7 +470,7 @@ def sc(
         reduction_channel="none",
         type_output="raw",
     )
-    sc = cat([sc_x, sc_y, sc_z], dim=2)
+    sc = cat([sc_x, sc_y, sc_z], dim=-1)
 
     # Average over channels if required
     if reduction_channel == "none":
