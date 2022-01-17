@@ -473,16 +473,17 @@ def sc(
     sc = cat([sc_x, sc_y, sc_z], dim=-1)
 
     # Average over channels if required
-    if reduction_channel == "none":
-        pass
-    elif reduction_channel == "mean":
-        sc = sc.mean(dim=1, keepdim=True)
-    elif reduction_channel == "sum":
-        sc = sc.sum(dim=1, keepdim=True)
-    else:
-        raise Exception(
-            f"Reduction '{reduction_channel}' not implemented! Please contact the developers."
-        )
+    if sc.dim() >2:
+        if reduction_channel == "none":
+            pass
+        elif reduction_channel == "mean":
+            sc = sc.mean(dim=1, keepdim=True)
+        elif reduction_channel == "sum":
+            sc = sc.sum(dim=1, keepdim=True)
+        else:
+            raise Exception(
+                f"Reduction '{reduction_channel}' not implemented! Please contact the developers."
+            )
 
     # Return results
     if type_output == "raw":
