@@ -456,16 +456,19 @@ def sc(
         image=image[:, :, : image.shape[2] // 2, :, :],
         reference=flip(image[:, :, -(image.shape[2] // 2) :, :, :], dims=[2]),
         reduction_channel="none",
+        type_output="raw",
     )
     sc_y = dsc(
         image=image[:, :, :, : image.shape[3] // 2, :],
         reference=flip(image[:, :, :, -(image.shape[3] // 2) :, :], dims=[3]),
         reduction_channel="none",
+        type_output="raw",
     )
     sc_z = dsc(
         image=image[:, :, :, :, : image.shape[4] // 2],
         reference=flip(image[:, :, :, :, -(image.shape[4] // 2) :], dims=[4]),
         reduction_channel="none",
+        type_output="raw",
     )
     sc = cat([sc_x, sc_y, sc_z], dim=2)
 
