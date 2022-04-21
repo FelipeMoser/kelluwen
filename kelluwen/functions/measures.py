@@ -179,10 +179,10 @@ def measure_iou(
     image = image.flatten(start_dim=2)
     reference = reference.flatten(start_dim=2)
     intersection = (image * reference).sum(dim=-1)
-    union = image.sum(dim=-1) + reference.sum(-1)
+    union = image.sum(dim=-1) + reference.sum(-1) - intersection
 
     # Calculate the IOU
-    iou = (2 * intersection + value_smooth) / (union + value_smooth)
+    iou = (intersection + value_smooth) / (union + value_smooth)
 
     # Combine channels if required
     if reduction_channel == "mean":
@@ -197,52 +197,33 @@ def measure_iou(
         return {"iou": iou}
 
 
+@typechecked
+def measure_mae(
+    image: tt.Tensor,
+    reference: tt.Tensor,
+    reduction_channel: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
 
-def mae(image, reference, reduction_channel="mean", type_output="dict"):
-    # Retrieve required variables
-    reduction_channel = reduction_channel.lower()
-    type_output = type_output.lower()
-
-    # Define supported reductions
-    supported_reductions = ("none", "mean", "sum")
-
-    # Define supported output types
-    supported_output = ("dict", "raw")
-
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
-        )
-
-    # Check that reduction function is supported
-    if reduction_channel not in supported_reductions:
-        raise ValueError(
-            "Unsupported channel reduction '{}'. Supported reductions: {}.".format(
-                function, supported_reductions
-            )
-        )
+    # Validate arguments
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
 
     # Calculate mean absolute error
-    if image.dim() > 2:
-        mae = (image - reference).abs().mean(dim=tuple(range(2, image.dim())))
+    image = image.flatten(start_dim=2)
+    reference = reference.flatten(start_dim=2)
+    mae = (image - reference).abs().mean(dim=-1)
 
-        # Average over channels if required
-        if reduction_channel == "none":
-            pass
-        elif reduction_channel == "mean":
-            mae = mae.mean(dim=1, keepdim=True)
-        elif reduction_channel == "sum":
-            mae = mae.sum(dim=1, keepdim=True)
-        else:
-            raise Exception(
-                "Reduction '{}' not implemented! Please contact the developers."
-            )
-    else:
-        mae = (image - reference).abs().mean(dim=1)
+    # Combine channels if required
+    if reduction_channel == "mean":
+        mae = mae.mean(dim=1)
+    elif reduction_channel == "sum":
+        mae = mae.sum(dim=1)
 
     # Return results
-    if type_output == "raw":
+    if type_output == "positional":
         return mae
     else:
         return {"mae": mae}
