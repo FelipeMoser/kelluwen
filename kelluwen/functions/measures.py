@@ -635,6 +635,33 @@ def measure_kld(
     reduction_channel: str = "mean",
     type_output: str = "positional",
 ) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Measures the Kullback–Leibler divergence (KLD) between a multivariative normal distribution define by mu and logvar, and a standard normal distrubution. This function is based on the work published in [1] and [2].
+
+    Parameters
+    ----------
+    mu : torch.bool
+        Means of the distribution being compared. Must be of shape (batch, channel), where channel represents the dimensionality of the distribution.
+
+    logvar: torch.Tensor
+        Logarithmic variance of the distribution being compared. Must be of shape (batch, channel), where channel represents the dimensionality of the distribution.
+
+    reduction_channel : str, optional (default="mean")
+        Determines whether the channel dimension of the KLD tensor is kept or combined. If set to "none", the channel dimension of the KLD is kept. If set to "mean" or "sum", the channel dimension of the KLD is averaged or summed, respectively.
+
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+    
+    Returns
+    -------
+    kld : torch.Tensor
+        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
+
+    References
+    -----    
+    [1] Kullback, S., & Leibler, R. A. (1951). Ann. Math. Stat, 22, 79-86.
+    [2] Kullback, S. (1997). Information theory and statistics. Courier Corporation.
+    """
+
     # Validate arguments
     if reduction_channel.lower() not in ("none", "mean", "sum"):
         raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
