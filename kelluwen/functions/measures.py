@@ -1,75 +1,77 @@
-from torch.nn.functional import conv1d, conv2d, conv3d, relu
-from torch import sqrt, sum, cat, flatten, where, tensor, zeros, flip
+import torch.nn.functional as ff
+import torch as tt
 from .transforms import generate_kernel
+from typeguard import typechecked
+from typing import Union, Dict
 
 
-def dsc(
-    image,
-    reference,
-    smoothing_constant=0.01,
-    reduction_channel="mean",
-    type_output="dict",
-):
-    # Retrieve required variables
-    reduction_channel = reduction_channel.lower()
-    type_output = type_output.lower()
+@typechecked
+def measure_dsc(
+    image: Union[tt.BoolTensor, tt.cuda.BoolTensor],
+    reference: Union[tt.BoolTensor, tt.cuda.BoolTensor],
+    value_smooth: float = 0.01,
+    reduction_channel: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Measures the Dice Similarity Coefficient (DSC) between two binary tensors. The DSC, also known as the Sørensen–Dice coefficient, is calculated using the method originally described in [1] and [2].
 
-    # Define supported reductions
-    supported_reductions = ("none", "mean", "sum")
+    Parameters
+    ----------
+    image : torch.bool
+        Binary image being compared. Must be of shape (batch, channel, *).
 
-    # Define supported output types
-    supported_output = ("dict", "raw")
+    reference : torch.bool
+        Binary reference against which the image is compared. Must be of shape (batch, channel, *).
 
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
-        )
+    value_smooth : float, optional (default=0.01)
+        Value added to the numerator and denominator in order to avoid division by zero if both image and reference contain no True values. 
 
-    # Check that reduction function is supported
-    if reduction_channel not in supported_reductions:
-        raise ValueError(
-            "Unsupported channel reduction '{}'. Supported reductions: {}.".format(
-                function, supported_reductions
-            )
-        )
+    reduction_channel : str, optional (default="mean")
+        Determines whether the channel dimension of the DSC tensor is kept or combined. If set to "none", the channel dimension of the DSC is kept. If set to "mean" or "sum", the channel dimension of the DSC is averaged or summed, respectively.
 
-    # Check that the smoothing constant is a number
-    if not isinstance(smoothing_constant, (int, float)):
-        raise TypeError("Smoothing constant must be a number.")
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+    
+    Returns
+    -------
+    dsc : torch.Tensor
+        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
 
-    # Calculate intersection
-    dims = tuple(range(2, image.dim()))
-    intersection = (image * reference).float().sum(dim=dims)
-    union = image.float().sum(dim=dims) + reference.float().sum(dims)
+    References
+    -----    
+    [1] Sorensen, T. A. (1948). A method of establishing groups of equal amplitude in plant sociology based on similarity of species content and its application to analyses of the vegetation on Danish commons. Biol. Skar., 5, 1-34.
+    
+    [2] Dice, L. R. (1945). Measures of the amount of ecologic association between species. Ecology, 26(3), 297-302."""
 
-    # Calculate dsc
-    dsc = (2 * intersection + smoothing_constant) / (union + smoothing_constant)
+    # Validate arguments
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
 
-    # Average over channels if required
-    if reduction_channel == "none":
-        pass
-    elif reduction_channel == "mean":
-        dsc = dsc.mean(dim=1, keepdim=True)
+    # Calculate numerator and denominator
+    dimensions_spatial = tuple(range(2, image.dim()))
+    numerator = (image * reference).sum(dim=dimensions_spatial)
+    denominator = image.sum(dim=dimensions_spatial) + reference.sum(dimensions_spatial)
+
+    # Calculate the DSC
+    dsc = (2 * numerator + value_smooth) / (denominator + value_smooth)
+
+    # Combine channels if required
+    if reduction_channel == "mean":
+        dsc = dsc.mean(dim=1)
     elif reduction_channel == "sum":
-        dsc = dsc.sum(dim=1, keepdim=True)
-    else:
-        raise Exception(
-            f"Reduction '{reduction_channel}' not implemented! Please contact the developers."
-        )
+        dsc = dsc.sum(dim=1)
 
     # Return results
-    if type_output == "raw":
+    if type_output == "positional":
         return dsc
     else:
         return {"dsc": dsc}
 
 
 def cd(
-    image,
-    reference,
-    reduction_channel="mean",
-    type_output="dict",
+    image, reference, reduction_channel="mean", type_output="dict",
 ):
     # Retrieve required variables
     reduction_channel = reduction_channel.lower()
@@ -102,19 +104,19 @@ def cd(
         )
 
     # Calculate centroids
-    centroid_image = zeros(size=(*image.shape[:2], 3))
-    centroid_reference = zeros(size=(*image.shape[:2], 3))
+    centroid_image = tt.zeros(size=(*image.shape[:2], 3))
+    centroid_reference = tt.zeros(size=(*image.shape[:2], 3))
     for b in range(image.shape[0]):
         for c in range(image.shape[1]):
-            centroid_image[b, c] = tensor(
-                [x.float().mean() for x in where(image[b, c] > 0)]
+            centroid_image[b, c] = tt.tensor(
+                [x.float().mean() for x in tt.where(image[b, c] > 0)]
             )
-            centroid_reference[b, c] = tensor(
-                [x.float().mean() for x in where(reference[b, c] > 0)]
+            centroid_reference[b, c] = tt.tensor(
+                [x.float().mean() for x in tt.where(reference[b, c] > 0)]
             )
 
     # Calculate distance between centroids
-    cd = sqrt(((centroid_reference - centroid_image) ** 2).sum(dim=-1))
+    cd = tt.sqrt(((centroid_reference - centroid_image) ** 2).sum(dim=-1))
 
     # Average over channels if required
     if reduction_channel == "none":
@@ -355,24 +357,24 @@ def pcc(
             shape_kernel=shape_kernel,
             sigma_kernel=sigma_kernel,
         )["kernel"]
-        kernel = cat(image.shape[1] * [kernel[None, None, :]]).to(image.device)
+        kernel = tt.cat(image.shape[1] * [kernel[None, None, :]]).to(image.device)
 
     # Select convolution type depending on dimensionality
     if image.dim() == 3:
-        conv = conv1d
+        conv = ff.conv1d
     elif image.dim() == 4:
-        conv = conv2d
+        conv = ff.conv2d
     else:
-        conv = conv3d
+        conv = ff.conv3d
 
     # Calculate means
     mean_x = conv(image, kernel, groups=image.shape[1])
     mean_y = conv(reference, kernel, groups=reference.shape[1])
 
     # Calculate standard deviations. Note that we use ReLU to remove small negatives from approximations
-    std_x = sqrt(relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2))
-    std_y = sqrt(
-        relu(conv(reference ** 2, kernel, groups=reference.shape[1]) - mean_y ** 2)
+    std_x = tt.sqrt(ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2))
+    std_y = tt.sqrt(
+        ff.relu(conv(reference ** 2, kernel, groups=reference.shape[1]) - mean_y ** 2)
     )
 
     # Calculate covariance
@@ -417,9 +419,7 @@ def pcc(
 
 
 def sc(
-    image,
-    reduction_channel="mean",
-    type_output="dict",
+    image, reduction_channel="mean", type_output="dict",
 ):
     # Retrieve required variables
     reduction_channel = reduction_channel.lower()
@@ -452,28 +452,28 @@ def sc(
         )
 
     # Calculate symmetry coefficient
-    sc_x = dsc(
+    sc_x = measure_dsc(
         image=image[:, :, : image.shape[2] // 2, :, :],
-        reference=flip(image[:, :, -(image.shape[2] // 2) :, :, :], dims=[2]),
+        reference=tt.flip(image[:, :, -(image.shape[2] // 2) :, :, :], dims=[2]),
         reduction_channel="none",
         type_output="raw",
     )
-    sc_y = dsc(
+    sc_y = measure_dsc(
         image=image[:, :, :, : image.shape[3] // 2, :],
-        reference=flip(image[:, :, :, -(image.shape[3] // 2) :, :], dims=[3]),
+        reference=tt.flip(image[:, :, :, -(image.shape[3] // 2) :, :], dims=[3]),
         reduction_channel="none",
         type_output="raw",
     )
-    sc_z = dsc(
+    sc_z = measure_dsc(
         image=image[:, :, :, :, : image.shape[4] // 2],
-        reference=flip(image[:, :, :, :, -(image.shape[4] // 2) :], dims=[4]),
+        reference=tt.flip(image[:, :, :, :, -(image.shape[4] // 2) :], dims=[4]),
         reduction_channel="none",
         type_output="raw",
     )
-    sc = cat([sc_x, sc_y, sc_z], dim=-1)
+    sc = tt.cat([sc_x, sc_y, sc_z], dim=-1)
 
     # Average over channels if required
-    if sc.dim() >2:
+    if sc.dim() > 2:
         if reduction_channel == "none":
             pass
         elif reduction_channel == "mean":
@@ -555,24 +555,24 @@ def ssim(
             shape_kernel=shape_kernel,
             sigma_kernel=sigma_kernel,
         )["kernel"]
-        kernel = cat(image.shape[1] * [kernel[None, None, :]]).to(image.device)
+        kernel = tt.cat(image.shape[1] * [kernel[None, None, :]]).to(image.device)
 
     # Select convolution type depending on dimensionality
     if image.dim() == 3:
-        conv = conv1d
+        conv = ff.conv1d
     elif image.dim() == 4:
-        conv = conv2d
+        conv = ff.conv2d
     else:
-        conv = conv3d
+        conv = ff.conv3d
 
     # Calculate means
     mean_x = conv(image, kernel, groups=image.shape[1])
     mean_y = conv(reference, kernel, groups=reference.shape[1])
 
     # Calculate standard deviations. Note that we use ReLU to remove small negatives from approximations
-    std_x = sqrt(relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2))
-    std_y = sqrt(
-        relu(conv(reference ** 2, kernel, groups=reference.shape[1]) - mean_y ** 2)
+    std_x = tt.sqrt(ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2))
+    std_y = tt.sqrt(
+        ff.relu(conv(reference ** 2, kernel, groups=reference.shape[1]) - mean_y ** 2)
     )
 
     # Calculate covariance
@@ -626,8 +626,8 @@ def kld(mean, logvar):
     # mu = kwargs["mean"]
 
     # Calculate kld
-    logvar = flatten(logvar, start_dim=1)
-    mean = flatten(mean, start_dim=1)
+    logvar = tt.flatten(logvar, start_dim=1)
+    mean = tt.flatten(mean, start_dim=1)
     kld = -0.5 * sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=1)
 
     # Return results
