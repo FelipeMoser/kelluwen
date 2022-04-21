@@ -204,7 +204,27 @@ def measure_mae(
     reduction_channel: str = "mean",
     type_output: str = "positional",
 ) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Measures the Mean Absolute Error (MAE) between two tensors.
 
+    Parameters
+    ----------
+    image : torch.bool
+        Image being compared. Must be of shape (batch, channel, *).
+
+    reference : torch.bool
+        Reference against which the image is compared. Must be of shape (batch, channel, *).
+
+    reduction_channel : str, optional (default="mean")
+        Determines whether the channel dimension of the MAE tensor is kept or combined. If set to "none", the channel dimension of the MAE is kept. If set to "mean" or "sum", the channel dimension of the MAE is averaged or summed, respectively.
+
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+    
+    Returns
+    -------
+    mae : torch.Tensor
+        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
+    """
     # Validate arguments
     if reduction_channel.lower() not in ("none", "mean", "sum"):
         raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
