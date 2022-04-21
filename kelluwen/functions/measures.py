@@ -17,10 +17,10 @@ def measure_dsc(
 
     Parameters
     ----------
-    image : torch.bool
+    image : torch.Tensor
         Image being compared. Must be of shape (batch, channel, *).
 
-    reference : torch.bool
+    reference : torch.Tensor
         Reference against which the image is compared. Must be of shape (batch, channel, *).
 
     value_smooth : float, optional (default=0.01)
@@ -82,10 +82,10 @@ def measure_cd(
 
     Parameters
     ----------
-    image : torch.bool
+    image : torch.Tensor
         Image being compared. Must be of shape (batch, channel, *).
 
-    reference : torch.bool
+    reference : torch.Tensor
         Reference against which the image is compared. Must be of shape (batch, channel, *).
 
     reduction_channel : str, optional (default="mean")
@@ -144,10 +144,10 @@ def measure_iou(
 
     Parameters
     ----------
-    image : torch.bool
+    image : torch.Tensor
         Image being compared. Must be of shape (batch, channel, *).
 
-    reference : torch.bool
+    reference : torch.Tensor
         Reference against which the image is compared. Must be of shape (batch, channel, *).
 
     value_smooth : float, optional (default=0.01)
@@ -208,10 +208,10 @@ def measure_mae(
 
     Parameters
     ----------
-    image : torch.bool
+    image : torch.Tensor
         Image being compared. Must be of shape (batch, channel, *).
 
-    reference : torch.bool
+    reference : torch.Tensor
         Reference against which the image is compared. Must be of shape (batch, channel, *).
 
     reduction_channel : str, optional (default="mean")
@@ -260,10 +260,10 @@ def measure_mse(
 
     Parameters
     ----------
-    image : torch.bool
+    image : torch.Tensor
         Image being compared. Must be of shape (batch, channel, *).
 
-    reference : torch.bool
+    reference : torch.Tensor
         Reference against which the image is compared. Must be of shape (batch, channel, *).
 
     reduction_channel : str, optional (default="mean")
@@ -639,7 +639,7 @@ def measure_kld(
 
     Parameters
     ----------
-    mu : torch.bool
+    mu : torch.Tensor
         Means of the distribution being compared. Must be of shape (batch, channel), where channel represents the dimensionality of the distribution.
 
     logvar: torch.Tensor
