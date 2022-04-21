@@ -231,7 +231,7 @@ def measure_mae(
     if type_output.lower() not in ("positional", "named"):
         raise ValueError(f"unknown value {type_output!r} for type_output")
 
-    # Calculate mean absolute error
+    # Calculate MAE
     image = image.flatten(start_dim=2)
     reference = reference.flatten(start_dim=2)
     mae = (image - reference).abs().mean(dim=-1)
@@ -249,48 +249,53 @@ def measure_mae(
         return {"mae": mae}
 
 
-def mse(image, reference, reduction_channel="mean", type_output="dict"):
-    # Retrieve required variables
-    reduction_channel = reduction_channel.lower()
-    type_output = type_output.lower()
+@typechecked
+def measure_mse(
+    image: tt.Tensor,
+    reference: tt.Tensor,
+    reduction_channel: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Measures the Mean Squared Error (MSE) between two tensors.
 
-    # Define supported reductions
-    supported_reductions = ("none", "mean", "sum")
+    Parameters
+    ----------
+    image : torch.bool
+        Image being compared. Must be of shape (batch, channel, *).
 
-    # Define supported output types
-    supported_output = ("dict", "raw")
+    reference : torch.bool
+        Reference against which the image is compared. Must be of shape (batch, channel, *).
 
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
-        )
+    reduction_channel : str, optional (default="mean")
+        Determines whether the channel dimension of the MSE tensor is kept or combined. If set to "none", the channel dimension of the MSE is kept. If set to "mean" or "sum", the channel dimension of the MSE is averaged or summed, respectively.
 
-    # Check that reduction function is supported
-    if reduction_channel not in supported_reductions:
-        raise ValueError(
-            "Unsupported channel reduction '{}'. Supported reductions: {}.".format(
-                function, supported_reductions
-            )
-        )
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+    
+    Returns
+    -------
+    mse : torch.Tensor
+        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
+    """
+    # Validate arguments
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
 
-    # Calculate mean squared error
-    mse = (image - reference).square().mean(dim=tuple(range(2, image.dim())))
+    # Calculate MSE
+    image = image.flatten(start_dim=2)
+    reference = reference.flatten(start_dim=2)
+    mse = (image - reference).square().mean(dim=-1)
 
-    # Average over channels if required
-    if reduction_channel == "none":
-        pass
-    elif reduction_channel == "mean":
-        mse = mse.mean(dim=1, keepdim=True)
+    # Combine channels if required
+    if reduction_channel == "mean":
+        mse = mse.mean(dim=1)
     elif reduction_channel == "sum":
-        mse = mse.sum(dim=1, keepdim=True)
-    else:
-        raise Exception(
-            "Reduction '{}' not implemented! Please contact the developers."
-        )
+        mse = mse.sum(dim=1)
 
     # Return results
-    if type_output == "raw":
+    if type_output == "positional":
         return mse
     else:
         return {"mse": mse}
