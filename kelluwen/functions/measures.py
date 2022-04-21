@@ -7,21 +7,21 @@ from typing import Union, Dict
 
 @typechecked
 def measure_dsc(
-    image: Union[tt.BoolTensor, tt.cuda.BoolTensor],
-    reference: Union[tt.BoolTensor, tt.cuda.BoolTensor],
+    image: tt.Tensor,
+    reference: tt.Tensor,
     value_smooth: float = 0.01,
     reduction_channel: str = "mean",
     type_output: str = "positional",
 ) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
-    """Measures the Dice Similarity Coefficient (DSC) between two binary tensors. The DSC, also known as the Sørensen–Dice coefficient, is calculated using the method originally described in [1] and [2].
+    """Measures the Dice Similarity Coefficient (DSC) between two tensors. The DSC, also known as the Sørensen–Dice coefficient, is calculated using the method originally described in [1] and [2].
 
     Parameters
     ----------
     image : torch.bool
-        Binary image being compared. Must be of shape (batch, channel, *).
+        Image being compared. Must be of shape (batch, channel, *).
 
     reference : torch.bool
-        Binary reference against which the image is compared. Must be of shape (batch, channel, *).
+        Reference against which the image is compared. Must be of shape (batch, channel, *).
 
     value_smooth : float, optional (default=0.01)
         Value added to the numerator and denominator in order to avoid division by zero if both image and reference contain no True values. 
@@ -50,9 +50,10 @@ def measure_dsc(
         raise ValueError(f"unknown value {type_output!r} for type_output")
 
     # Calculate numerator and denominator
-    dimensions_spatial = tuple(range(2, image.dim()))
-    numerator = (image * reference).sum(dim=dimensions_spatial)
-    denominator = image.sum(dim=dimensions_spatial) + reference.sum(dimensions_spatial)
+    image = image.flatten(start_dim=2)
+    reference = reference.flatten(start_dim=2)
+    numerator = (image * reference).sum(dim=-1)
+    denominator = image.sum(dim=-1) + reference.sum(-1)
 
     # Calculate the DSC
     dsc = (2 * numerator + value_smooth) / (denominator + value_smooth)
@@ -70,134 +71,131 @@ def measure_dsc(
         return {"dsc": dsc}
 
 
-def cd(
-    image, reference, reduction_channel="mean", type_output="dict",
-):
-    # Retrieve required variables
-    reduction_channel = reduction_channel.lower()
-    type_output = type_output.lower()
+@typechecked
+def measure_cd(
+    image: tt.Tensor,
+    reference: tt.Tensor,
+    reduction_channel: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Measures the Centroid Distance (CD) between two tensors. The CD is the Euclidean distance between the centroids of the image and reference tensors, weighted by the intensities.
 
-    # Define supported reductions
-    supported_reductions = ("none", "mean", "sum")
+    Parameters
+    ----------
+    image : torch.bool
+        Image being compared. Must be of shape (batch, channel, *).
 
-    # Define supported output types
-    supported_output = ("dict", "raw")
+    reference : torch.bool
+        Reference against which the image is compared. Must be of shape (batch, channel, *).
 
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
-        )
+    reduction_channel : str, optional (default="mean")
+        Determines whether the channel dimension of the CD tensor is kept or combined. If set to "none", the channel dimension of the CD is kept. If set to "mean" or "sum", the channel dimension of the CD is averaged or summed, respectively.
 
-    # Check that reduction function is supported
-    if reduction_channel not in supported_reductions:
-        raise ValueError(
-            "Unsupported channel reduction '{}'. Supported reductions: {}.".format(
-                function, supported_reductions
-            )
-        )
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+    
+    Returns
+    -------
+    cd : torch.Tensor
+        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
+    """
 
-    # Check image
-    if image.dim() != 5:
-        raise ValueError(
-            "Unsuported image dimensionality. Currently only image.dim()=5 is supported"
-        )
+    # Validate arguments
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
+
+    # Generate grids
+    grids = tt.meshgrid(*[tt.arange(x) for x in image.shape[2:]], indexing="ij")
+    grids = tt.stack(grids, dim=-1).flatten(end_dim=-2)[None, None, :].to(image.device)
 
     # Calculate centroids
-    centroid_image = tt.zeros(size=(*image.shape[:2], 3))
-    centroid_reference = tt.zeros(size=(*image.shape[:2], 3))
-    for b in range(image.shape[0]):
-        for c in range(image.shape[1]):
-            centroid_image[b, c] = tt.tensor(
-                [x.float().mean() for x in tt.where(image[b, c] > 0)]
-            )
-            centroid_reference[b, c] = tt.tensor(
-                [x.float().mean() for x in tt.where(reference[b, c] > 0)]
-            )
+    image = image.flatten(start_dim=2).unsqueeze(-1)
+    reference = reference.flatten(start_dim=2).unsqueeze(-1)
+    centroid_image = (grids * image).sum(dim=2) / image.sum(dim=2)
+    centroid_reference = (grids * reference).sum(dim=2) / reference.sum(dim=2)
 
     # Calculate distance between centroids
     cd = tt.sqrt(((centroid_reference - centroid_image) ** 2).sum(dim=-1))
 
-    # Average over channels if required
-    if reduction_channel == "none":
-        pass
-    elif reduction_channel == "mean":
-        cd = cd.mean(dim=1, keepdim=True)
+    # Combine channels if required
+    if reduction_channel == "mean":
+        cd = cd.mean(dim=1)
     elif reduction_channel == "sum":
-        cd = cd.sum(dim=1, keepdim=True)
-    else:
-        raise Exception(
-            f"Reduction '{reduction_channel}' not implemented! Please contact the developers."
-        )
+        cd = cd.sum(dim=1)
 
     # Return results
-    if type_output == "raw":
+    if type_output == "positional":
         return cd
     else:
         return {"cd": cd}
 
 
-def iou(
-    image,
-    reference,
-    smoothing_constant=0.01,
-    reduction_channel="mean",
-    type_output="dict",
-):
+@typechecked
+def measure_iou(
+    image: tt.Tensor,
+    reference: tt.Tensor,
+    value_smooth: float = 0.01,
+    reduction_channel: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Measures the Intersection Over Union (IOU) between two tensors. The IOU, also known as the Jaccard index, is calculated using the method originally described in [1].
 
-    # Retrieve required variables
-    reduction_channel = reduction_channel.lower()
-    type_output = type_output.lower()
+    Parameters
+    ----------
+    image : torch.bool
+        Image being compared. Must be of shape (batch, channel, *).
 
-    # Define supported reductions
-    supported_reductions = ("none", "mean", "sum")
+    reference : torch.bool
+        Reference against which the image is compared. Must be of shape (batch, channel, *).
 
-    # Define supported output types
-    supported_output = ("dict", "raw")
+    value_smooth : float, optional (default=0.01)
+        Value added to the numerator and denominator in order to avoid division by zero if both image and reference contain no True values. 
 
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
-        )
+    reduction_channel : str, optional (default="mean")
+        Determines whether the channel dimension of the IOU tensor is kept or combined. If set to "none", the channel dimension of the IOU is kept. If set to "mean" or "sum", the channel dimension of the IOU is averaged or summed, respectively.
 
-    # Check that reduction function is supported
-    if reduction_channel not in supported_reductions:
-        raise ValueError(
-            "Unsupported channel reduction '{}'. Supported reductions: {}.".format(
-                function, supported_reductions
-            )
-        )
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+    
+    Returns
+    -------
+    iou : torch.Tensor
+        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
 
-    # Check that the smoothing constant is a number
-    if not isinstance(smoothing_constant, (int, float)):
-        raise TypeError("Smoothing constant must be a number.")
+    References
+    -----    
+    [1] Jaccard, P. (1912). The distribution of the flora in the alpine zone. 1. New phytologist, 11(2), 37-50.
+    """
 
-    # Calculate intersection
-    dims = tuple(range(2, image.dim()))
-    intersection = (image * reference).sum(dim=dims)
-    union = image.sum(dim=dims) + reference.sum(dim=dims) - intersection
+    # Validate arguments
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
 
-    # Calculate iou
-    iou = (intersection + smoothing_constant) / (union + smoothing_constant)
+    # Calculate intersection and union
+    image = image.flatten(start_dim=2)
+    reference = reference.flatten(start_dim=2)
+    intersection = (image * reference).sum(dim=-1)
+    union = image.sum(dim=-1) + reference.sum(-1)
 
-    # Average over channels if required
-    if reduction_channel == "none":
-        pass
-    elif reduction_channel == "mean":
-        iou = iou.mean(dim=1, keepdim=True)
+    # Calculate the IOU
+    iou = (2 * intersection + value_smooth) / (union + value_smooth)
+
+    # Combine channels if required
+    if reduction_channel == "mean":
+        iou = iou.mean(dim=1)
     elif reduction_channel == "sum":
-        iou = iou.sum(dim=1, keepdim=True)
-    else:
-        raise Exception(
-            "Reduction '{}' not implemented! Please contact the developers."
-        )
+        iou = iou.sum(dim=1)
 
     # Return results
-    if type_output == "raw":
+    if type_output == "positional":
         return iou
     else:
         return {"iou": iou}
+
 
 
 def mae(image, reference, reduction_channel="mean", type_output="dict"):
@@ -372,7 +370,9 @@ def pcc(
     mean_y = conv(reference, kernel, groups=reference.shape[1])
 
     # Calculate standard deviations. Note that we use ReLU to remove small negatives from approximations
-    std_x = tt.sqrt(ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2))
+    std_x = tt.sqrt(
+        ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2)
+    )
     std_y = tt.sqrt(
         ff.relu(conv(reference ** 2, kernel, groups=reference.shape[1]) - mean_y ** 2)
     )
@@ -570,7 +570,9 @@ def ssim(
     mean_y = conv(reference, kernel, groups=reference.shape[1])
 
     # Calculate standard deviations. Note that we use ReLU to remove small negatives from approximations
-    std_x = tt.sqrt(ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2))
+    std_x = tt.sqrt(
+        ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2)
+    )
     std_y = tt.sqrt(
         ff.relu(conv(reference ** 2, kernel, groups=reference.shape[1]) - mean_y ** 2)
     )
