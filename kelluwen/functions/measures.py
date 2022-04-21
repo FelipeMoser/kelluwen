@@ -628,15 +628,30 @@ def ssim(
         return {"ssim": ssim}
 
 
-def kld(mean, logvar):
-    # # Retrieve required variables
-    # logvar = kwargs["logvar"]
-    # mu = kwargs["mean"]
+@typechecked
+def measure_kld(
+    mu: tt.Tensor,
+    logvar: tt.Tensor,
+    reduction_channel: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    # Validate arguments
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
 
     # Calculate kld
-    logvar = tt.flatten(logvar, start_dim=1)
-    mean = tt.flatten(mean, start_dim=1)
-    kld = -0.5 * sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=1)
+    kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(dim=1).mean()
+
+    # Combine channels if required
+    if reduction_channel == "mean":
+        kld = kld.mean(dim=1)
+    elif reduction_channel == "sum":
+        kld = kld.sum(dim=1)
 
     # Return results
-    return {"kld": kld}
+    if type_output == "positional":
+        return kld
+    else:
+        return {"kld": kld}
