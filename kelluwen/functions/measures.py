@@ -24,23 +24,23 @@ def measure_dsc(
         Reference against which the image is compared. Must be of shape (batch, channel, *).
 
     value_smooth : float, optional (default=0.01)
-        Value added to the numerator and denominator in order to avoid division by zero if both image and reference contain no True values. 
+        Value added to the numerator and denominator in order to avoid division by zero if both image and reference contain no True values.
 
     reduction_channel : str, optional (default="mean")
         Determines whether the channel dimension of the DSC tensor is kept or combined. If set to "none", the channel dimension of the DSC is kept. If set to "mean" or "sum", the channel dimension of the DSC is averaged or summed, respectively.
 
     type_output : str, optional (default="positional")
         Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
-    
+
     Returns
     -------
     dsc : torch.Tensor
         Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
 
     References
-    -----    
+    -----
     [1] Sorensen, T. A. (1948). A method of establishing groups of equal amplitude in plant sociology based on similarity of species content and its application to analyses of the vegetation on Danish commons. Biol. Skar., 5, 1-34.
-    
+
     [2] Dice, L. R. (1945). Measures of the amount of ecologic association between species. Ecology, 26(3), 297-302."""
 
     # Validate arguments
@@ -93,7 +93,7 @@ def measure_cd(
 
     type_output : str, optional (default="positional")
         Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
-    
+
     Returns
     -------
     cd : torch.Tensor
@@ -134,38 +134,38 @@ def measure_cd(
 
 @typechecked
 def measure_iou(
-    image: tt.Tensor,
-    reference: tt.Tensor,
+    image: Union[tt.BoolTensor, tt.cuda.BoolTensor],
+    reference: Union[tt.BoolTensor, tt.cuda.BoolTensor],
     value_smooth: float = 0.01,
     reduction_channel: str = "mean",
     type_output: str = "positional",
 ) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
-    """Measures the Intersection Over Union (IOU) between two tensors. The IOU, also known as the Jaccard index, is calculated using the method originally described in [1].
+    """Measures the Intersection Over Union (IOU) between two binary tensors. The IOU, also known as the Jaccard Similarity Coefficient, is calculated using the method originally described in [1].
 
     Parameters
     ----------
     image : torch.Tensor
-        Image being compared. Must be of shape (batch, channel, *).
+        Image being compared. Must be boolean of shape (batch, channel, *).
 
     reference : torch.Tensor
-        Reference against which the image is compared. Must be of shape (batch, channel, *).
+        Reference against which the image is compared. Must be boolean of shape (batch, channel, *).
 
     value_smooth : float, optional (default=0.01)
-        Value added to the numerator and denominator in order to avoid division by zero if both image and reference contain no True values. 
+        Value added to the numerator and denominator in order to avoid division by zero if both image and reference contain no True values.
 
     reduction_channel : str, optional (default="mean")
         Determines whether the channel dimension of the IOU tensor is kept or combined. If set to "none", the channel dimension of the IOU is kept. If set to "mean" or "sum", the channel dimension of the IOU is averaged or summed, respectively.
 
     type_output : str, optional (default="positional")
         Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
-    
+
     Returns
     -------
     iou : torch.Tensor
         Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
 
     References
-    -----    
+    -----
     [1] Jaccard, P. (1912). The distribution of the flora in the alpine zone. 1. New phytologist, 11(2), 37-50.
     """
 
@@ -198,6 +198,75 @@ def measure_iou(
 
 
 @typechecked
+def measure_rsc(
+    image: tt.Tensor,
+    reference: tt.Tensor,
+    value_smooth: float = 0.01,
+    reduction_channel: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Measures the Ruzicka Similarity Coefficient (RSC) between two tensors. The RSC, also known as the generalised or weighted Jaccard Similarity Coefficient, is calculated using the method as described in [1][2][3]. Note that if image and reference are binary tensors, this method is identical to the standard Jaccard Similarity Coefficient, also known as Intersection Over Union.
+
+        Parameters
+        ----------
+        image : torch.Tensor
+            Image being compared. Must be of shape (batch, channel, *). Values must be non-negative and real.
+
+        reference : torch.Tensor
+            Reference against which the image is compared. Must be of shape (batch, channel, *). Values must be non-negative and real.
+
+        value_smooth : float, optional (default=0.01)
+            Value added to the numerator and denominator in order to avoid division by zero if both image and reference only zero-values.
+
+        reduction_channel : str, optional (default="mean")
+            Determines whether the channel dimension of the RSC tensor is kept or combined. If set to "none", the channel dimension of the RSC is kept. If set to "mean" or "sum", the channel dimension of the RSC is averaged or summed, respectively.
+
+        type_output : str, optional (default="positional")
+            Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+
+        Returns
+        -------
+        iou : torch.Tensor
+            Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
+
+        References
+        -----
+        [1] Warrens, M. J. (2016). Inequalities between similarities for numerical data. Journal of Classification, 33(1), 141-148.
+        [2] Deza, M. M., & Deza, E. (2009). Encyclopedia of distances. In Encyclopedia of distances (pp. 1-583). Springer, Berlin, Heidelberg.
+        [3] Wu, W., Li, B., Chen, L., Zhang, C., & Philip, S. Y. (2018). Improved consistent weighted sampling revisited. IEEE Transactions on Knowledge and Data Engineering, 31(12), 2332-2345.
+        """
+
+    # Validate arguments
+    if tt.any(image < 0):
+        raise ValueError(f"input image must be non-negative")
+    if tt.any(reference < 0):
+        raise ValueError(f"input reference must be non-negative")
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
+
+    # Calculate WJS
+    image = image.flatten(start_dim=2)
+    reference = reference.flatten(start_dim=2)
+    wjs = (tt.minimum(image, reference).sum(dim=2) + value_smooth) / (
+        tt.maximum(image, reference).sum(dim=2) + value_smooth
+    )
+
+    # Combine channels if required
+    if reduction_channel == "mean":
+        wjs = wjs.mean(dim=1)
+    elif reduction_channel == "sum":
+        wjs = wjs.sum(dim=1)
+
+    # Return results
+    if type_output == "positional":
+        return wjs
+    else:
+        return {"wjs": wjs}
+
+
+@typechecked
 def measure_mae(
     image: tt.Tensor,
     reference: tt.Tensor,
@@ -219,7 +288,7 @@ def measure_mae(
 
     type_output : str, optional (default="positional")
         Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
-    
+
     Returns
     -------
     mae : torch.Tensor
@@ -271,7 +340,7 @@ def measure_mse(
 
     type_output : str, optional (default="positional")
         Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
-    
+
     Returns
     -------
     mse : torch.Tensor
@@ -650,14 +719,14 @@ def measure_kld(
 
     type_output : str, optional (default="positional")
         Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
-    
+
     Returns
     -------
     kld : torch.Tensor
         Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
 
     References
-    -----    
+    -----
     [1] Kullback, S., & Leibler, R. A. (1951). Ann. Math. Stat, 22, 79-86.
     [2] Kullback, S. (1997). Information theory and statistics. Courier Corporation.
     """
