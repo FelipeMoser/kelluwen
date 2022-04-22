@@ -52,11 +52,11 @@ def measure_dsc(
     # Calculate numerator and denominator
     image = image.flatten(start_dim=2)
     reference = reference.flatten(start_dim=2)
-    numerator = (image * reference).sum(dim=-1)
-    denominator = image.sum(dim=-1) + reference.sum(-1)
 
     # Calculate the DSC
-    dsc = (2 * numerator + value_smooth) / (denominator + value_smooth)
+    dsc = (2 * (image * reference).sum(dim=-1) + value_smooth) / (
+        image.sum(dim=-1) + reference.sum(-1) + value_smooth
+    )
 
     # Combine channels if required
     if reduction_channel == "mean":
