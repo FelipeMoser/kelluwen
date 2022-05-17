@@ -49,7 +49,7 @@ def measure_dsc(
     if type_output.lower() not in ("positional", "named"):
         raise ValueError(f"unknown value {type_output!r} for type_output")
 
-    # Calculate numerator and denominator
+    # Flatten image and reference
     image = image.flatten(start_dim=2)
     reference = reference.flatten(start_dim=2)
 
