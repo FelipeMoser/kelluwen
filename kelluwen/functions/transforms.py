@@ -743,7 +743,7 @@ def generate_rotation(
     else:
         # Check if quaternions are normalised
         if not tt.allclose(
-            parameter_rotation.norm(dim=-1), tt.tensor([1.0], device=device)
+            parameter_rotation.norm(dim=-1), tt.tensor([1.0], device=device).type(parameter_rotation.type())
         ):
             raise ValueError(
                 f"parameter_rotation of type Quaternion must be normalised. Got parameter_rotation.norm(dim=-1)={parameter_rotation.norm(dim=-1)} instead",
