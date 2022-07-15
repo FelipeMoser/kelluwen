@@ -1,6 +1,6 @@
 import torch as tt
 from typeguard import typechecked
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Tuple
 
 
 @typechecked
@@ -259,7 +259,7 @@ def deconstruct_affine(
     transform_order: str = "srt",
     type_rotation: str = "euler_xyz",
     type_output: str = "positional",
-) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+) -> Union[Tuple, Dict[str, tt.Tensor]]:
     """Deconstucts the affine transform into its comforming translation, rotation, and scaling parameters.
 
     Parameters
@@ -304,7 +304,7 @@ def deconstruct_affine(
         "euler_yzx",
         "euler_zxy",
         "euler_zyx",
-        "quaternion",
+        "quaternions",
     ):
         raise ValueError(f"unknown value {type_rotation!r} for type_rotation")
     if type_output.lower() not in ("positional", "named"):
@@ -377,7 +377,7 @@ def deconstruct_affine(
     if transform_rotation.shape[2] == 2:  # 2D rotation
         parameter_rotation = tt.asin(transform_rotation[..., 1, 0])
     else:  # 3D rotation
-        if type_rotation == "quaternion":
+        if type_rotation == "quaternions":
             # Extract quaternions from rotation transform
             trace_transform_rotation = (
                 transform_rotation[..., 0, 0]
@@ -443,7 +443,7 @@ def deconstruct_affine(
 
     # Return results
     if type_output == "positional":
-        return parameter_rotation, parameter_rotation, parameter_scaling
+        return parameter_translation, parameter_rotation, parameter_scaling
     else:
         return {
             "parameter_translation": parameter_translation,
