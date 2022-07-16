@@ -260,7 +260,7 @@ def deconstruct_affine(
     type_rotation: str = "euler_xyz",
     type_output: str = "positional",
 ) -> Union[Tuple, Dict[str, tt.Tensor]]:
-    """Deconstucts the affine transform into its conforming translation, rotation, and scaling parameters.
+    """Deconstructs the affine transform into its conforming translation, rotation, and scaling parameters.
 
     Parameters
     ----------
