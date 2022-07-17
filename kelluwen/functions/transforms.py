@@ -379,23 +379,33 @@ def deconstruct_affine(
     else:  # 3D rotation
         if type_rotation == "quaternions":
             # Extract quaternions from rotation transform
-            trace_transform_rotation = (
-                transform_rotation[..., 0, 0]
-                + transform_rotation[..., 1, 1]
-                + transform_rotation[..., 2, 2]
-            )
-            q0 = tt.sqrt(1 + trace_transform_rotation) / 2
-            q1 = (transform_rotation[..., 2, 1] - transform_rotation[..., 1, 2]) / (
-                2 * tt.sqrt(1 + trace_transform_rotation)
-            )
-            q2 = (transform_rotation[..., 0, 2] - transform_rotation[..., 2, 0]) / (
-                2 * tt.sqrt(1 + trace_transform_rotation)
-            )
-            q3 = (transform_rotation[..., 1, 0] - transform_rotation[..., 0, 1]) / (
-                2 * tt.sqrt(1 + trace_transform_rotation)
-            )
-            parameter_rotation = tt.stack([q0, q1, q2, q3], dim=2)
+            # This section has been adapted to pytorch from nibabel's implementation: https://nipy.org/nibabel/reference/nibabel.quaternions.html
+            transform_rotation = transform_rotation[..., :-1, :-1].flatten(start_dim=-2)
+            Qxx, Qyx, Qzx, Qxy, Qyy, Qzy, Qxz, Qyz, Qzz = [
+                transform_rotation[..., i] for i in range(transform_rotation.shape[-1])
+            ]
 
+            K = tt.eye(4).tile(*transform_rotation.shape[:-1], 1, 1)
+            K[..., 0, 0] = Qxx - Qyy - Qzz
+            K[..., 1, 0] = Qyx + Qxy
+            K[..., 1, 1] = Qyy - Qxx - Qzz
+            K[..., 2, 0] = Qzx + Qxz
+            K[..., 2, 1] = Qzy + Qyz
+            K[..., 2, 2] = Qzz - Qxx - Qyy
+            K[..., 3, 0] = Qyz - Qzy
+            K[..., 3, 1] = Qzx - Qxz
+            K[..., 3, 2] = Qxy - Qyx
+            K[..., 3, 3] = Qxx + Qyy + Qzz
+            K /= 3
+            vals, vecs = tt.linalg.eigh(K)
+            q = vecs[..., [3, 0, 1, 2], :]
+            parameter_rotation = tt.zeros([*transform_rotation.shape[:2], 4])
+            idx =tt.argmax(vals , dim=-1)
+            for i in range(q.shape[0]):
+                for j in range(q.shape[1]):
+                    parameter_rotation[i, j] = q[i,j,:,idx[i,j]]
+                    if parameter_rotation[i, j, 0] <0:
+                        parameter_rotation[i, j] *=-1            
         else:
             # Get indices for the necessary transform components
             euler_idx = dict(
@@ -585,7 +595,7 @@ def generate_kernel(
 
     elif type_kernel == "gaussian":
         for g, s in zip(grids, sigma_kernel):
-            kernel *= tt.exp(-(g**2) / (2 * (s**2))) / (
+            kernel *= tt.exp(-(g ** 2) / (2 * (s ** 2))) / (
                 tt.sqrt(tt.tensor([2 * tt.pi])) * s
             )
         # Normalise kernel to compensate for small approximation errors
@@ -755,15 +765,15 @@ def generate_rotation(
 
         # Generate rotation transform
         transform_rotation = transform_identity
-        transform_rotation[..., 0, 0] = 1 - 2 * (q2**2 + q3**2)
+        transform_rotation[..., 0, 0] = 1 - 2 * (q2 ** 2 + q3 ** 2)
         transform_rotation[..., 0, 1] = 2 * (q1 * q2 - q3 * q0)
         transform_rotation[..., 0, 2] = 2 * (q1 * q3 + q2 * q0)
         transform_rotation[..., 1, 0] = 2 * (q1 * q2 + q3 * q0)
-        transform_rotation[..., 1, 1] = 1 - 2 * (q1**2 + q3**2)
+        transform_rotation[..., 1, 1] = 1 - 2 * (q1 ** 2 + q3 ** 2)
         transform_rotation[..., 1, 2] = 2 * (q2 * q3 - q1 * q0)
         transform_rotation[..., 2, 0] = 2 * (q1 * q3 - q2 * q0)
         transform_rotation[..., 2, 1] = 2 * (q2 * q3 + q1 * q0)
-        transform_rotation[..., 2, 2] = 1 - 2 * (q1**2 + q2**2)
+        transform_rotation[..., 2, 2] = 1 - 2 * (q1 ** 2 + q2 ** 2)
 
     # Return results
     if type_output == "positional":
