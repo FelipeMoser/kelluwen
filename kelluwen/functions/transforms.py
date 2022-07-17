@@ -337,14 +337,14 @@ def deconstruct_affine(
     transform_rotation[..., :-1, -1] = 0
 
     # Extract translation transform
-    if transform_order == "trs":
-        transform_translation = transform_affine.matmul(
-            transform_scaling.inverse()
-        ).matmul(transform_rotation.inverse())
-    elif transform_order == "tsr":
-        transform_translation = transform_affine.matmul(
-            transform_rotation.inverse()
-        ).matmul(transform_scaling.inverse())
+    if transform_order in ("trs", "tsr"):
+        transform_translation = tt.eye(4).tile((*transform_affine.shape[:2], 1, 1))
+        transform_translation[..., :-1, -1] = transform_affine[..., :-1, -1]
+    elif transform_order == "str":
+        transform_translation = tt.eye(4).tile((*transform_affine.shape[:2], 1, 1))
+        transform_translation[..., :-1, -1] = transform_scaling.inverse().matmul(
+            transform_affine
+        )[..., :-1, -1]
     elif transform_order == "rts":
         transform_translation = (
             transform_rotation.inverse()
@@ -362,12 +362,6 @@ def deconstruct_affine(
             transform_rotation.inverse()
             .matmul(transform_scaling.inverse())
             .matmul(transform_affine)
-        )
-    elif transform_order == "str":
-        transform_translation = (
-            transform_scaling.inverse()
-            .matmul(transform_affine)
-            .matmul(transform_rotation.inverse())
         )
 
     # Extract translation parameters
