@@ -429,13 +429,13 @@ def deconstruct_affine(
 
             # Get Euler angles
             alpha = tt.atan2(
-                idx_s * transform_rotation[..., idx_alpha[0, 0], idx_alpha[0, 1]],
-                transform_rotation[..., idx_alpha[1, 0], idx_alpha[1, 1]],
+                idx_s * transform_rotation[..., idx_alpha[0][0], idx_alpha[0][1]],
+                transform_rotation[..., idx_alpha[1][0], idx_alpha[1][1]],
             )
             beta = -idx_s * tt.asin(transform_rotation[..., idx_beta[0], idx_beta[1]])
             gamma = tt.atan2(
-                idx_s * transform_rotation[..., idx_gamma[0, 0], idx_gamma[0, 1]],
-                transform_rotation[..., idx_gamma[1, 0], idx_gamma[1, 1]],
+                idx_s * transform_rotation[..., idx_gamma[0][0], idx_gamma[0][1]],
+                transform_rotation[..., idx_gamma[1][0], idx_gamma[1][1]],
             )
             parameter_rotation = tt.stack([alpha, beta, gamma], dim=2)
 
