@@ -565,7 +565,7 @@ def generate_kernel(
         raise ValueError(
             f"mismatched number of elements in shape_kernel and sigma_kernel"
         )
-    if type_kernel.lower() not in ("positional", "named"):
+    if type_kernel.lower() not in ("uniform", "gaussian"):
         raise ValueError(f"unknown value {type_kernel!r} for type_kernel")
     if type_output.lower() not in ("positional", "named"):
         raise ValueError(f"unknown value {type_output!r} for type_output")
