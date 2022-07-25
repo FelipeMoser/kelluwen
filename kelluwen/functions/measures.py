@@ -238,7 +238,7 @@ def measure_kld(
         raise ValueError(f"unknown value {type_output!r} for type_output")
 
     # Calculate kld
-    kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(dim=1).mean()
+    kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).mean(dim=-1)
 
     # Combine channels if required
     if reduction_channel == "mean":
