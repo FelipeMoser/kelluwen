@@ -493,75 +493,64 @@ def pcc(
         return {"pcc": pcc}
 
 
-def sc(
-    image, reduction_channel="mean", type_output="dict",
-):
-    # Retrieve required variables
+@typechecked
+def measure_sc(
+    image: tt.Tensor, reduction_channel: str = "mean", type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """
+    """
+
+    # Validate arguments
+    if image.dim() not in (3, 4, 5):
+        raise ValueError(
+            f"image must be a 3D, 4D, or 5D tensor, got {image.dim()}D instead."
+        )
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
+
+    # Update variables if required
     reduction_channel = reduction_channel.lower()
     type_output = type_output.lower()
 
-    # Define supported reductions
-    supported_reductions = ("none", "mean", "sum")
-
-    # Define supported output types
-    supported_output = ("dict", "raw")
-
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
-        )
-
-    # Check that reduction function is supported
-    if reduction_channel not in supported_reductions:
-        raise ValueError(
-            "Unsupported channel reduction '{}'. Supported reductions: {}.".format(
-                function, supported_reductions
-            )
-        )
-
-    # Check image
-    if image.dim() != 5:
-        raise ValueError(
-            "Unsuported image dimensionality. Currently only image.dim()=5 is supported"
-        )
-
-    # Calculate symmetry coefficient
+    # Calculate symmetry coefficients
     sc_x = measure_dsc(
-        image=image[:, :, : image.shape[2] // 2, :, :],
-        reference=tt.flip(image[:, :, -(image.shape[2] // 2) :, :, :], dims=[2]),
+        image=image[:, :, : image.shape[2] // 2],
+        reference=tt.flip(image[:, :, -(image.shape[2] // 2) :], dims=[2]),
         reduction_channel="none",
-        type_output="raw",
+        type_output="positional",
     )
-    sc_y = measure_dsc(
-        image=image[:, :, :, : image.shape[3] // 2, :],
-        reference=tt.flip(image[:, :, :, -(image.shape[3] // 2) :, :], dims=[3]),
-        reduction_channel="none",
-        type_output="raw",
-    )
-    sc_z = measure_dsc(
-        image=image[:, :, :, :, : image.shape[4] // 2],
-        reference=tt.flip(image[:, :, :, :, -(image.shape[4] // 2) :], dims=[4]),
-        reduction_channel="none",
-        type_output="raw",
-    )
-    sc = tt.cat([sc_x, sc_y, sc_z], dim=-1)
+    if image.dim() > 3:
+        sc_y = measure_dsc(
+            image=image[:, :, :, : image.shape[3] // 2],
+            reference=tt.flip(image[..., -(image.shape[3] // 2) :], dims=[3]),
+            reduction_channel="none",
+            type_output="positional",
+        )
+    if image.dim() > 4:
+        sc_z = measure_dsc(
+            image=image[:, :, :, :, : image.shape[4] // 2],
+            reference=tt.flip(image[:, :, :, :, -(image.shape[4] // 2) :], dims=[4]),
+            reduction_channel="none",
+            type_output="positional",
+        )
+    if image.dim() == 3:
+        sc = tt.stack([sc_x,], dim=-1)
+    if image.dim() == 4:
+        sc = tt.stack([sc_x, sc_y], dim=-1)
+    if image.dim() == 5:
+        sc = tt.stack([sc_x, sc_y, sc_z], dim=-1)
 
     # Average over channels if required
-    if sc.dim() > 2:
-        if reduction_channel == "none":
-            pass
-        elif reduction_channel == "mean":
+    if reduction_channel != "none":
+        if reduction_channel == "mean":
             sc = sc.mean(dim=1, keepdim=True)
-        elif reduction_channel == "sum":
+        if reduction_channel == "sum":
             sc = sc.sum(dim=1, keepdim=True)
-        else:
-            raise Exception(
-                f"Reduction '{reduction_channel}' not implemented! Please contact the developers."
-            )
 
     # Return results
-    if type_output == "raw":
+    if type_output == "positional":
         return sc
     else:
         return {"sc": sc}
