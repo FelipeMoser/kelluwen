@@ -6,6 +6,67 @@ from typing import Union, Dict
 
 
 @typechecked
+def measure_cd(
+    image: tt.Tensor,
+    reference: tt.Tensor,
+    reduction_channel: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Measures the Centroid Distance (CD) between two tensors. The CD is the Euclidean distance between the centroids of the image and reference tensors, weighted by the intensities.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        Image being compared. Must be of shape (batch, channel, *).
+
+    reference : torch.Tensor
+        Reference against which the image is compared. Must be of shape (batch, channel, *).
+
+    reduction_channel : str, optional (default="mean")
+        Determines whether the channel dimension of the CD tensor is kept or combined. If set to "none", the channel dimension of the CD is kept. If set to "mean" or "sum", the channel dimension of the CD is averaged or summed, respectively.
+
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+
+    Returns
+    -------
+    cd : torch.Tensor
+        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
+    """
+
+    # Validate arguments
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
+
+    # Generate grids
+    grids = tt.meshgrid(*[tt.arange(x) for x in image.shape[2:]], indexing="ij")
+    grids = tt.stack(grids, dim=-1).flatten(end_dim=-2)[None, None, :].to(image.device)
+
+    # Calculate centroids
+    image = image.flatten(start_dim=2).unsqueeze(-1)
+    reference = reference.flatten(start_dim=2).unsqueeze(-1)
+    centroid_image = (grids * image).sum(dim=2) / image.sum(dim=2)
+    centroid_reference = (grids * reference).sum(dim=2) / reference.sum(dim=2)
+
+    # Calculate distance between centroids
+    cd = tt.sqrt(((centroid_reference - centroid_image) ** 2).sum(dim=-1))
+
+    # Combine channels if required
+    if reduction_channel == "mean":
+        cd = cd.mean(dim=1)
+    elif reduction_channel == "sum":
+        cd = cd.sum(dim=1)
+
+    # Return results
+    if type_output == "positional":
+        return cd
+    else:
+        return {"cd": cd}
+
+
+@typechecked
 def measure_dsc(
     image: tt.Tensor,
     reference: tt.Tensor,
@@ -69,67 +130,6 @@ def measure_dsc(
         return dsc
     else:
         return {"dsc": dsc}
-
-
-@typechecked
-def measure_cd(
-    image: tt.Tensor,
-    reference: tt.Tensor,
-    reduction_channel: str = "mean",
-    type_output: str = "positional",
-) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
-    """Measures the Centroid Distance (CD) between two tensors. The CD is the Euclidean distance between the centroids of the image and reference tensors, weighted by the intensities.
-
-    Parameters
-    ----------
-    image : torch.Tensor
-        Image being compared. Must be of shape (batch, channel, *).
-
-    reference : torch.Tensor
-        Reference against which the image is compared. Must be of shape (batch, channel, *).
-
-    reduction_channel : str, optional (default="mean")
-        Determines whether the channel dimension of the CD tensor is kept or combined. If set to "none", the channel dimension of the CD is kept. If set to "mean" or "sum", the channel dimension of the CD is averaged or summed, respectively.
-
-    type_output : str, optional (default="positional")
-        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
-
-    Returns
-    -------
-    cd : torch.Tensor
-        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
-    """
-
-    # Validate arguments
-    if reduction_channel.lower() not in ("none", "mean", "sum"):
-        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
-    if type_output.lower() not in ("positional", "named"):
-        raise ValueError(f"unknown value {type_output!r} for type_output")
-
-    # Generate grids
-    grids = tt.meshgrid(*[tt.arange(x) for x in image.shape[2:]], indexing="ij")
-    grids = tt.stack(grids, dim=-1).flatten(end_dim=-2)[None, None, :].to(image.device)
-
-    # Calculate centroids
-    image = image.flatten(start_dim=2).unsqueeze(-1)
-    reference = reference.flatten(start_dim=2).unsqueeze(-1)
-    centroid_image = (grids * image).sum(dim=2) / image.sum(dim=2)
-    centroid_reference = (grids * reference).sum(dim=2) / reference.sum(dim=2)
-
-    # Calculate distance between centroids
-    cd = tt.sqrt(((centroid_reference - centroid_image) ** 2).sum(dim=-1))
-
-    # Combine channels if required
-    if reduction_channel == "mean":
-        cd = cd.mean(dim=1)
-    elif reduction_channel == "sum":
-        cd = cd.sum(dim=1)
-
-    # Return results
-    if type_output == "positional":
-        return cd
-    else:
-        return {"cd": cd}
 
 
 @typechecked
@@ -198,72 +198,59 @@ def measure_iou(
 
 
 @typechecked
-def measure_rsc(
-    image: tt.Tensor,
-    reference: tt.Tensor,
-    value_smooth: float = 0.01,
+def measure_kld(
+    mu: tt.Tensor,
+    logvar: tt.Tensor,
     reduction_channel: str = "mean",
     type_output: str = "positional",
 ) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
-    """Measures the Ruzicka Similarity Coefficient (RSC) between two tensors. The RSC, also known as the generalised or weighted Jaccard Similarity Coefficient, is calculated using the method as described in [1][2][3]. Note that if image and reference are binary tensors, this method is identical to the standard Jaccard Similarity Coefficient, also known as Intersection Over Union.
+    """Measures the Kullback–Leibler divergence (KLD) between a multivariative normal distribution define by mu and logvar, and a standard normal distrubution. This function is based on the work published in [1] and [2].
 
-        Parameters
-        ----------
-        image : torch.Tensor
-            Image being compared. Must be of shape (batch, channel, *). Values must be non-negative and real.
+    Parameters
+    ----------
+    mu : torch.Tensor
+        Means of the distribution being compared. Must be of shape (batch, channel), where channel represents the dimensionality of the distribution.
 
-        reference : torch.Tensor
-            Reference against which the image is compared. Must be of shape (batch, channel, *). Values must be non-negative and real.
+    logvar: torch.Tensor
+        Logarithmic variance of the distribution being compared. Must be of shape (batch, channel), where channel represents the dimensionality of the distribution.
 
-        value_smooth : float, optional (default=0.01)
-            Value added to the numerator and denominator in order to avoid division by zero if both image and reference only zero-values.
+    reduction_channel : str, optional (default="mean")
+        Determines whether the channel dimension of the KLD tensor is kept or combined. If set to "none", the channel dimension of the KLD is kept. If set to "mean" or "sum", the channel dimension of the KLD is averaged or summed, respectively.
 
-        reduction_channel : str, optional (default="mean")
-            Determines whether the channel dimension of the RSC tensor is kept or combined. If set to "none", the channel dimension of the RSC is kept. If set to "mean" or "sum", the channel dimension of the RSC is averaged or summed, respectively.
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
 
-        type_output : str, optional (default="positional")
-            Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+    Returns
+    -------
+    kld : torch.Tensor
+        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
 
-        Returns
-        -------
-        iou : torch.Tensor
-            Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
-
-        References
-        -----
-        [1] Warrens, M. J. (2016). Inequalities between similarities for numerical data. Journal of Classification, 33(1), 141-148.
-        [2] Deza, M. M., & Deza, E. (2009). Encyclopedia of distances. In Encyclopedia of distances (pp. 1-583). Springer, Berlin, Heidelberg.
-        [3] Wu, W., Li, B., Chen, L., Zhang, C., & Philip, S. Y. (2018). Improved consistent weighted sampling revisited. IEEE Transactions on Knowledge and Data Engineering, 31(12), 2332-2345.
-        """
+    References
+    -----
+    [1] Kullback, S., & Leibler, R. A. (1951). Ann. Math. Stat, 22, 79-86.
+    [2] Kullback, S. (1997). Information theory and statistics. Courier Corporation.
+    """
 
     # Validate arguments
-    if tt.any(image < 0):
-        raise ValueError(f"input image must be non-negative")
-    if tt.any(reference < 0):
-        raise ValueError(f"input reference must be non-negative")
     if reduction_channel.lower() not in ("none", "mean", "sum"):
         raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
     if type_output.lower() not in ("positional", "named"):
         raise ValueError(f"unknown value {type_output!r} for type_output")
 
-    # Calculate WJS
-    image = image.flatten(start_dim=2)
-    reference = reference.flatten(start_dim=2)
-    wjs = (tt.minimum(image, reference).sum(dim=2) + value_smooth) / (
-        tt.maximum(image, reference).sum(dim=2) + value_smooth
-    )
+    # Calculate kld
+    kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(dim=1).mean()
 
     # Combine channels if required
     if reduction_channel == "mean":
-        wjs = wjs.mean(dim=1)
+        kld = kld.mean(dim=1)
     elif reduction_channel == "sum":
-        wjs = wjs.sum(dim=1)
+        kld = kld.sum(dim=1)
 
     # Return results
     if type_output == "positional":
-        return wjs
+        return kld
     else:
-        return {"wjs": wjs}
+        return {"kld": kld}
 
 
 @typechecked
@@ -370,67 +357,48 @@ def measure_mse(
         return {"mse": mse}
 
 
-def pcc(
-    image,
-    reference,
-    smoothing_constant=0.01,
-    reduction_channel="mean",
-    reduction_spatial="mean",
-    kernel=None,
-    type_kernel="gaussian",
-    shape_kernel=None,
-    sigma_kernel=None,
-    type_output="dict",
-):
-    # Retrieve required variables
+@typechecked
+def measure_pcc(
+    image: tt.Tensor,
+    reference: tt.Tensor,
+    kernel: tt.Tensor,
+    value_smooth: float = 0.01,
+    value_range: float = None,
+    reduction_channel: str = "mean",
+    reduction_spatial: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+
+    # Validate arguments
+    if image.dim() not in (3, 4, 5):
+        raise ValueError(
+            f"image must be a 3D, 4D, or 5D tensor, got {image.dim()}D instead."
+        )
+    if image.shape != reference.shape:
+        raise ValueError(f"mismatched shape of image and reference")
+    if kernel.dim() != (image.dim() - 2):
+        raise ValueError(f"mismatched shape of kernel and image")
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if reduction_spatial.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_spatial!r} for reduction_spatial")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
+
+    # Update variables if required
     reduction_channel = reduction_channel.lower()
+    reduction_spatial = reduction_spatial.lower()
     type_output = type_output.lower()
-    if kernel == None:
-        if shape_kernel == None:
-            shape_kernel = [5] * (image.dim() - 2)
-        if sigma_kernel == None:
-            sigma_kernel = [3] * (image.dim() - 2)
 
-    # Define supported reductions
-    supported_reductions = ("none", "mean", "sum")
-
-    # Define supported output types
-    supported_output = ("dict", "raw")
-
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
+    #  Get value_range if required
+    if value_range == None:
+        value_range = tt.max(image.max(), reference.max()) - tt.min(
+            image.min(), reference.min()
         )
 
-    # Check that channel reduction function is supported
-    if reduction_channel not in supported_reductions:
-        raise ValueError(
-            "Unsupported channel reduction type '{}'. Supported types: {}.".format(
-                function, supported_reductions
-            )
-        )
-
-    # Check that spatial reduction functions are supported
-    if reduction_spatial not in supported_reductions:
-        raise ValueError(
-            "Unsupported spatial type '{}'. Supported types: {}".format(
-                function, supported_reductions
-            )
-        )
-
-    # Check that the smoothing constant is a number
-    if not isinstance(smoothing_constant, (int, float)):
-        raise TypeError("Smoothing constant must be a number.")
-
-    # Generate kernel if required
-    if kernel == None:
-        kernel = generate_kernel(
-            type_kernel=type_kernel,
-            shape_kernel=shape_kernel,
-            sigma_kernel=sigma_kernel,
-        )["kernel"]
-        kernel = tt.cat(image.shape[1] * [kernel[None, None, :]]).to(image.device)
+    # Calculate constants
+    value_c1 = (value_k1 * value_range) ** 2
+    value_c2 = (value_k2 * value_range) ** 2
 
     # Select convolution type depending on dimensionality
     if image.dim() == 3:
@@ -440,57 +408,123 @@ def pcc(
     else:
         conv = ff.conv3d
 
+    # Tile kernel as required
+    kernel = tt.tile(kernel[None, None, :], (image.shape[1], 1, 1, 1, 1))
+
     # Calculate means
-    mean_x = conv(image, kernel, groups=image.shape[1])
-    mean_y = conv(reference, kernel, groups=reference.shape[1])
+    mean_image = conv(image, kernel, groups=image.shape[1])
+    mean_reference = conv(reference, kernel, groups=reference.shape[1])
 
     # Calculate standard deviations. Note that we use ReLU to remove small negatives from approximations
-    std_x = tt.sqrt(
-        ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2)
+    std_image = tt.sqrt(
+        ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_image ** 2)
     )
-    std_y = tt.sqrt(
-        ff.relu(conv(reference ** 2, kernel, groups=reference.shape[1]) - mean_y ** 2)
+    std_reference = tt.sqrt(
+        ff.relu(
+            conv(reference ** 2, kernel, groups=reference.shape[1])
+            - mean_reference ** 2
+        )
     )
 
     # Calculate covariance
-    cov_xy = conv(image * reference, kernel, groups=image.shape[1]) - mean_x * mean_y
+    cov_image_reference = (
+        conv(image * reference, kernel, groups=image.shape[1])
+        - mean_image * mean_reference
+    )
 
-    # Calculate luminance, contrast, and structure
-    pcc = (cov_xy + smoothing_constant) / (std_x * std_y + smoothing_constant)
+    # Calculate PCC
+    pcc = (cov_image_reference + value_smooth) / (
+        std_image * std_reference + value_smooth
+    )
 
     # Average over channels if required
-    if reduction_channel == "none":
-        pass
-    elif reduction_channel == "mean":
-        pcc = pcc.mean(dim=1, keepdim=True)
-    elif reduction_channel == "sum":
-        pcc = pcc.sum(dim=1, keepdim=True)
-    else:
-        raise Exception(
-            "Reduction '{}' not implemented! Please contact the developers."
-        )
+    if reduction_channel != "none":
+        if reduction_channel == "mean":
+            pcc = pcc.mean(dim=1, keepdim=True)
+        if reduction_channel == "sum":
+            pcc = pcc.sum(dim=1, keepdim=True)
 
     # Average over spatial dimensions if required
-    if reduction_spatial == "none":
-        pass
-    else:
-        dims = tuple(range(1 + (reduction_channel == "none"), pcc.dim()))
+    if reduction_spatial != "none":
         if reduction_spatial == "mean":
-            pcc = pcc.mean(dim=dims)
-
-        elif reduction_spatial == "sum":
-            pcc = pcc.sum(dim=dims)
-
-        else:
-            raise Exception(
-                "Reduction '{}' not implemented! Please contact the developers."
-            )
+            pcc = pcc.flatten(start_dim=2).mean(-1)
+        if reduction_spatial == "sum":
+            pcc = pcc.flatten(start_dim=2).sum(-1)
 
     # Return results
-    if type_output == "raw":
+    if type_output == "positional":
         return pcc
     else:
         return {"pcc": pcc}
+
+
+@typechecked
+def measure_rsc(
+    image: tt.Tensor,
+    reference: tt.Tensor,
+    value_smooth: float = 0.01,
+    reduction_channel: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Measures the Ruzicka Similarity Coefficient (RSC) between two tensors. The RSC, also known as the generalised or weighted Jaccard Similarity Coefficient, is calculated using the method as described in [1][2][3]. Note that if image and reference are binary tensors, this method is identical to the standard Jaccard Similarity Coefficient, also known as Intersection Over Union.
+
+        Parameters
+        ----------
+        image : torch.Tensor
+            Image being compared. Must be of shape (batch, channel, *). Values must be non-negative and real.
+
+        reference : torch.Tensor
+            Reference against which the image is compared. Must be of shape (batch, channel, *). Values must be non-negative and real.
+
+        value_smooth : float, optional (default=0.01)
+            Value added to the numerator and denominator in order to avoid division by zero if both image and reference only zero-values.
+
+        reduction_channel : str, optional (default="mean")
+            Determines whether the channel dimension of the RSC tensor is kept or combined. If set to "none", the channel dimension of the RSC is kept. If set to "mean" or "sum", the channel dimension of the RSC is averaged or summed, respectively.
+
+        type_output : str, optional (default="positional")
+            Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+
+        Returns
+        -------
+        iou : torch.Tensor
+            Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
+
+        References
+        -----
+        [1] Warrens, M. J. (2016). Inequalities between similarities for numerical data. Journal of Classification, 33(1), 141-148.
+        [2] Deza, M. M., & Deza, E. (2009). Encyclopedia of distances. In Encyclopedia of distances (pp. 1-583). Springer, Berlin, Heidelberg.
+        [3] Wu, W., Li, B., Chen, L., Zhang, C., & Philip, S. Y. (2018). Improved consistent weighted sampling revisited. IEEE Transactions on Knowledge and Data Engineering, 31(12), 2332-2345.
+        """
+
+    # Validate arguments
+    if tt.any(image < 0):
+        raise ValueError(f"input image must be non-negative")
+    if tt.any(reference < 0):
+        raise ValueError(f"input reference must be non-negative")
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
+
+    # Calculate WJS
+    image = image.flatten(start_dim=2)
+    reference = reference.flatten(start_dim=2)
+    wjs = (tt.minimum(image, reference).sum(dim=2) + value_smooth) / (
+        tt.maximum(image, reference).sum(dim=2) + value_smooth
+    )
+
+    # Combine channels if required
+    if reduction_channel == "mean":
+        wjs = wjs.mean(dim=1)
+    elif reduction_channel == "sum":
+        wjs = wjs.sum(dim=1)
+
+    # Return results
+    if type_output == "positional":
+        return wjs
+    else:
+        return {"wjs": wjs}
 
 
 @typechecked
@@ -662,58 +696,3 @@ def measure_ssim(
     else:
         return {"ssim": ssim}
 
-
-@typechecked
-def measure_kld(
-    mu: tt.Tensor,
-    logvar: tt.Tensor,
-    reduction_channel: str = "mean",
-    type_output: str = "positional",
-) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
-    """Measures the Kullback–Leibler divergence (KLD) between a multivariative normal distribution define by mu and logvar, and a standard normal distrubution. This function is based on the work published in [1] and [2].
-
-    Parameters
-    ----------
-    mu : torch.Tensor
-        Means of the distribution being compared. Must be of shape (batch, channel), where channel represents the dimensionality of the distribution.
-
-    logvar: torch.Tensor
-        Logarithmic variance of the distribution being compared. Must be of shape (batch, channel), where channel represents the dimensionality of the distribution.
-
-    reduction_channel : str, optional (default="mean")
-        Determines whether the channel dimension of the KLD tensor is kept or combined. If set to "none", the channel dimension of the KLD is kept. If set to "mean" or "sum", the channel dimension of the KLD is averaged or summed, respectively.
-
-    type_output : str, optional (default="positional")
-        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
-
-    Returns
-    -------
-    kld : torch.Tensor
-        Tensor of shape (batch, channel) if reduction_channel=="none". Otherwise, tensor of shape (batch,).
-
-    References
-    -----
-    [1] Kullback, S., & Leibler, R. A. (1951). Ann. Math. Stat, 22, 79-86.
-    [2] Kullback, S. (1997). Information theory and statistics. Courier Corporation.
-    """
-
-    # Validate arguments
-    if reduction_channel.lower() not in ("none", "mean", "sum"):
-        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
-    if type_output.lower() not in ("positional", "named"):
-        raise ValueError(f"unknown value {type_output!r} for type_output")
-
-    # Calculate kld
-    kld = -0.5 * (1 + logvar - mu ** 2 - logvar.exp()).sum(dim=1).mean()
-
-    # Combine channels if required
-    if reduction_channel == "mean":
-        kld = kld.mean(dim=1)
-    elif reduction_channel == "sum":
-        kld = kld.sum(dim=1)
-
-    # Return results
-    if type_output == "positional":
-        return kld
-    else:
-        return {"kld": kld}
