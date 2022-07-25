@@ -556,70 +556,49 @@ def measure_sc(
         return {"sc": sc}
 
 
-def ssim(
-    image,
-    reference,
-    smoothing_constant=0.01,
-    k1=0.01,
-    k2=0.03,
-    dynamic_range=1,
-    reduction_channel="mean",
-    reduction_spatial="mean",
-    kernel=None,
-    type_kernel="gaussian",
-    shape_kernel=None,
-    sigma_kernel=None,
-    type_output="dict",
-):
+@typechecked
+def measure_ssim(
+    image: tt.Tensor,
+    reference: tt.Tensor,
+    kernel: tt.Tensor,
+    value_k1: float = 0.01,
+    value_k2: float = 0.03,
+    value_range: float = None,
+    reduction_channel: str = "mean",
+    reduction_spatial: str = "mean",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
 
-    # Retrieve required variables
+    # Validate arguments
+    if image.dim() not in (3, 4, 5):
+        raise ValueError(
+            f"image must be a 3D, 4D, or 5D tensor, got {image.dim()}D instead."
+        )
+    if image.shape != reference.shape:
+        raise ValueError(f"mismatched shape of image and reference")
+    if kernel.dim() != (image.dim() - 2):
+        raise ValueError(f"mismatched shape of kernel and image")
+    if reduction_channel.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_channel!r} for reduction_channel")
+    if reduction_spatial.lower() not in ("none", "mean", "sum"):
+        raise ValueError(f"unknown value {reduction_spatial!r} for reduction_spatial")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
+
+    # Update variables if required
     reduction_channel = reduction_channel.lower()
+    reduction_spatial = reduction_spatial.lower()
     type_output = type_output.lower()
-    if kernel == None:
-        if shape_kernel == None:
-            shape_kernel = [5] * (image.dim() - 2)
-        if sigma_kernel == None:
-            sigma_kernel = [3] * (image.dim() - 2)
 
-    # Define supported reductions
-    supported_reductions = ("none", "mean", "sum")
-
-    # Define supported output types
-    supported_output = ("dict", "raw")
-
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
+    #  Get value_range if required
+    if value_range == None:
+        value_range = tt.max(image.max(), reference.max()) - tt.min(
+            image.min(), reference.min()
         )
 
-    # Check that channel reduction function is supported
-    if reduction_channel not in supported_reductions:
-        raise ValueError(
-            "Unsupported channel reduction type '{}'. Supported types: {}.".format(
-                function, supported_reductions
-            )
-        )
-
-    # Check that spatial reduction functions are supported
-    if reduction_spatial not in supported_reductions:
-        raise ValueError(
-            "Unsupported spatial type '{}'. Supported types: {}".format(
-                function, supported_reductions
-            )
-        )
     # Calculate constants
-    c1 = (k1 * dynamic_range) ** 2
-    c2 = (k2 * dynamic_range) ** 2
-
-    # Generate kernel if required
-    if kernel == None:
-        kernel = generate_kernel(
-            type_kernel=type_kernel,
-            shape_kernel=shape_kernel,
-            sigma_kernel=sigma_kernel,
-        )["kernel"]
-        kernel = tt.cat(image.shape[1] * [kernel[None, None, :]]).to(image.device)
+    value_c1 = (value_k1 * value_range) ** 2
+    value_c2 = (value_k2 * value_range) ** 2
 
     # Select convolution type depending on dimensionality
     if image.dim() == 3:
@@ -629,58 +608,56 @@ def ssim(
     else:
         conv = ff.conv3d
 
+    # Tile kernel as required
+    kernel = tt.tile(kernel[None, None, :], (image.shape[1], 1, 1, 1, 1))
+
     # Calculate means
-    mean_x = conv(image, kernel, groups=image.shape[1])
-    mean_y = conv(reference, kernel, groups=reference.shape[1])
+    mean_image = conv(image, kernel, groups=image.shape[1])
+    mean_reference = conv(reference, kernel, groups=reference.shape[1])
 
     # Calculate standard deviations. Note that we use ReLU to remove small negatives from approximations
-    std_x = tt.sqrt(
-        ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_x ** 2)
+    std_image = tt.sqrt(
+        ff.relu(conv(image ** 2, kernel, groups=image.shape[1]) - mean_image ** 2)
     )
-    std_y = tt.sqrt(
-        ff.relu(conv(reference ** 2, kernel, groups=reference.shape[1]) - mean_y ** 2)
+    std_reference = tt.sqrt(
+        ff.relu(
+            conv(reference ** 2, kernel, groups=reference.shape[1])
+            - mean_reference ** 2
+        )
     )
 
     # Calculate covariance
-    cov_xy = conv(image * reference, kernel, groups=image.shape[1]) - mean_x * mean_y
+    cov_image_reference = (
+        conv(image * reference, kernel, groups=image.shape[1])
+        - mean_image * mean_reference
+    )
 
     # Calculate SSIM
     ssim = (
-        (2 * mean_x * mean_y + c1)
-        * (2 * cov_xy + c2)
-        / ((mean_x ** 2 + mean_y ** 2 + c1) * (std_x ** 2 + std_y ** 2 + c2))
+        (2 * mean_image * mean_reference + value_c1)
+        * (2 * cov_image_reference + value_c2)
+        / (
+            (mean_image ** 2 + mean_reference ** 2 + value_c1)
+            * (std_image ** 2 + std_reference ** 2 + value_c2)
+        )
     )
 
     # Average over channels if required
-    if reduction_channel == "none":
-        pass
-    elif reduction_channel == "mean":
-        ssim = ssim.mean(dim=1, keepdim=True)
-    elif reduction_channel == "sum":
-        ssim = ssim.sum(dim=1, keepdim=True)
-    else:
-        raise Exception(
-            "Reduction '{}' not implemented! Please contact the developers."
-        )
+    if reduction_channel != "none":
+        if reduction_channel == "mean":
+            ssim = ssim.mean(dim=1, keepdim=True)
+        if reduction_channel == "sum":
+            ssim = ssim.sum(dim=1, keepdim=True)
 
     # Average over spatial dimensions if required
-    if reduction_spatial == "none":
-        pass
-    else:
-        dims = tuple(range(1 + (reduction_channel == "none"), ssim.dim()))
+    if reduction_spatial != "none":
         if reduction_spatial == "mean":
-            ssim = ssim.mean(dim=dims)
-
-        elif reduction_spatial == "sum":
-            ssim = ssim.sum(dim=dims)
-
-        else:
-            raise Exception(
-                "Reduction '{}' not implemented! Please contact the developers."
-            )
+            ssim = ssim.flatten(start_dim=2).mean(-1)
+        if reduction_spatial == "sum":
+            ssim = ssim.flatten(start_dim=2).sum(-1)
 
     # Return results
-    if type_output == "raw":
+    if type_output == "positional":
         return ssim
     else:
         return {"ssim": ssim}
