@@ -396,10 +396,6 @@ def measure_pcc(
             image.min(), reference.min()
         )
 
-    # Calculate constants
-    value_c1 = (value_k1 * value_range) ** 2
-    value_c2 = (value_k2 * value_range) ** 2
-
     # Select convolution type depending on dimensionality
     if image.dim() == 3:
         conv = ff.conv1d
