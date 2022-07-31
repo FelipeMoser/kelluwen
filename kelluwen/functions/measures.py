@@ -362,7 +362,7 @@ def measure_pcc(
     image: tt.Tensor,
     reference: tt.Tensor,
     kernel: tt.Tensor,
-    value_smooth: float = 0.01,
+    value_k: float = 0.01,
     value_range: float = None,
     reduction_channel: str = "mean",
     reduction_spatial: str = "mean",
@@ -395,6 +395,9 @@ def measure_pcc(
         value_range = tt.max(image.max(), reference.max()) - tt.min(
             image.min(), reference.min()
         )
+
+    # Calculate constants
+    value_c = (value_k * value_range) ** 2
 
     # Select convolution type depending on dimensionality
     if image.dim() == 3:
@@ -429,9 +432,7 @@ def measure_pcc(
     )
 
     # Calculate PCC
-    pcc = (cov_image_reference + value_smooth) / (
-        std_image * std_reference + value_smooth
-    )
+    pcc = (cov_image_reference + value_c) / (std_image * std_reference + value_c)
 
     # Average over channels if required
     if reduction_channel != "none":
