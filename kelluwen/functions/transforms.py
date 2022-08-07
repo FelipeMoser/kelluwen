@@ -393,13 +393,15 @@ def deconstruct_affine(
             K /= 3
             vals, vecs = tt.linalg.eigh(K)
             q = vecs[..., [3, 0, 1, 2], :]
-            parameter_rotation = tt.zeros([*transform_rotation.shape[:2], 4])
-            idx =tt.argmax(vals , dim=-1)
+            parameter_rotation = tt.zeros(
+                [*transform_rotation.shape[:2], 4], device=transform_affine.device
+            )
+            idx = tt.argmax(vals, dim=-1)
             for i in range(q.shape[0]):
                 for j in range(q.shape[1]):
-                    parameter_rotation[i, j] = q[i,j,:,idx[i,j]]
-                    if parameter_rotation[i, j, 0] <0:
-                        parameter_rotation[i, j] *=-1            
+                    parameter_rotation[i, j] = q[i, j, :, idx[i, j]]
+                    if parameter_rotation[i, j, 0] < 0:
+                        parameter_rotation[i, j] *= -1
         else:
             # Get indices for the necessary transform components
             euler_idx = dict(
@@ -589,7 +591,7 @@ def generate_kernel(
 
     elif type_kernel == "gaussian":
         for g, s in zip(grids, sigma_kernel):
-            kernel *= tt.exp(-(g ** 2) / (2 * (s ** 2))) / (
+            kernel *= tt.exp(-(g**2) / (2 * (s**2))) / (
                 tt.sqrt(tt.tensor([2 * tt.pi])) * s
             )
         # Normalise kernel to compensate for small approximation errors
@@ -759,15 +761,15 @@ def generate_rotation(
 
         # Generate rotation transform
         transform_rotation = transform_identity
-        transform_rotation[..., 0, 0] = 1 - 2 * (q2 ** 2 + q3 ** 2)
+        transform_rotation[..., 0, 0] = 1 - 2 * (q2**2 + q3**2)
         transform_rotation[..., 0, 1] = 2 * (q1 * q2 - q3 * q0)
         transform_rotation[..., 0, 2] = 2 * (q1 * q3 + q2 * q0)
         transform_rotation[..., 1, 0] = 2 * (q1 * q2 + q3 * q0)
-        transform_rotation[..., 1, 1] = 1 - 2 * (q1 ** 2 + q3 ** 2)
+        transform_rotation[..., 1, 1] = 1 - 2 * (q1**2 + q3**2)
         transform_rotation[..., 1, 2] = 2 * (q2 * q3 - q1 * q0)
         transform_rotation[..., 2, 0] = 2 * (q1 * q3 - q2 * q0)
         transform_rotation[..., 2, 1] = 2 * (q2 * q3 + q1 * q0)
-        transform_rotation[..., 2, 2] = 1 - 2 * (q1 ** 2 + q2 ** 2)
+        transform_rotation[..., 2, 2] = 1 - 2 * (q1**2 + q2**2)
 
     # Return results
     if type_output == "positional":
