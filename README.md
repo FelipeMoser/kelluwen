@@ -19,19 +19,19 @@ from torch import rand
 img = rand(2, 3, 100, 100, 100)
 
 # Define parameters for affine transform. These transforms can be independent for each channel. If there is no channel dimension, the same transform will be applied for all channels.
-parameters = dict(parameter_translation=rand(2,3),
+parameters = dict(
+    parameter_translation=rand(2,3),
     parameter_rotation=rand(2,3),
     parameter_scaling=rand(2,3),
     type_rotation="euler_xyz",
     transform_order="trs",
-    type_output="dict",
 )
 
 # Generate affine transform
 transform = generate_affine(**parameters)
 
 # Apply affine transform to image tensor
-img_transformed = apply_affine(image=img, **transform)["image"]
+img_transformed = apply_affine(image=img, **transform)
 
 
 # Show midplanes of volume. In this example we're using the RAS coordinate system, and we're scaling the features using a min-max method.
