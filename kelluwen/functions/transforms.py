@@ -480,10 +480,10 @@ def generate_affine(
     parameter_scaling : torch.Tensor
         Scaling parameters. Must be of shape (batch, channel, parameters) or (batch, parameters), with parameters=2 or 3 for 2D and 3D images, respectively.
 
-    type_rotation: str, optional (default="euler_xyz)
+    type_rotation: str, optional (default="euler_xyz")
         Type of rotation parameters: quaternions or Euler angles. For Euler angles, the order of the multiplication of the rotations around x, y, and z is represented in the name (euler_xyz, euler_yzx, etc.)
 
-    transform_order : str, optional (default="srt)
+    transform_order : str, optional (default="trs")
         Order of multiplication of translation, rotation, and scaling transforms
 
     type_output : str, optional (default="positional")
