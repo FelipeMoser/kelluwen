@@ -1,84 +1,101 @@
-from torch import Tensor, full, tensor, minimum, maximum
-import matplotlib.pyplot as plt
-from .transforms import scale_features
+import torch as tt
+from typeguard import typechecked
+from typing import Union, Dict, List, Tuple
+import math
 
 
+@typechecked
 def centre_crop(
-    image, shape_output, value_pad=0, type_order="after", type_output="dict"
-):
-    # Define supported padding order. This order defines which side will be padded more in the case that asymmetric padding is needed.
-    supported_order = ("before", "after")
+    image: tt.Tensor,
+    shape_output: Union[tt.Size, List[int]],
+    value_pad: int = 0,
+    type_order: str = "after",
+    type_output: str = "positional",
+) -> Union[tt.Tensor, Dict[str, tt.Tensor]]:
+    """Crops image tensor around its centre
 
-    # Define supported output types
-    supported_output = ("dict", "raw")
+    Parameters
+    ----------
+    image : torch.Tensor
+        Image to be cropped. Must be of shape (batch, channel, *).
 
-    # Check that the padding order is supported
-    if type_order not in supported_order:
+    shape_output : torch.Size, List[int]
+        Output shape of cropped image. Must have the same number of spatial dimensions as the image.
+
+    value_pad: int, optional (default=0)
+        Value for padding regions outside initial image.
+
+    type_order: str, optional (default="after)
+        This order defines which side will be padded more in the case that asymmetric padding is needed.
+
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+
+    Returns
+    -------
+    image_cropped : torch.Tensor
+    """
+
+    # Validate arguments
+    if image.dim() < 3:
         raise ValueError(
-            f"Unknown padding order type {type_order}. Supported types: {supported_order}"
+            f"expected input image to be at least 3D, got {image.dim()!r}D instead"
         )
+    if len(shape_output) + 2 != image.dim():
+        raise ValueError(f"shape_output doesn't match image.shape")
+    if type_order.lower() not in ("before", "after"):
+        raise ValueError(f"unknown value {type_order!r} for type_order")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
 
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
-        )
+    # Retrieve image device
+    device = image.device
 
-    # Check image tensor
-    if not isinstance(image, Tensor):
-        raise TypeError(f"Image must be a tensor, got {type(image)} instead.")
-
-    # Check output shape
-    if len(shape_output) != image.dim():
-        raise ValueError(
-            f"Output shape must have the same dimensionality as the input, got {len(shape_output)} and {image.dim()} instead."
-        )
-    elif list(image.shape[:2]) != list(shape_output[:2]):
-        raise ValueError(
-            f"Batch and channel dimensions of the output shape must match that of the input, got {shape_output[:2]} and {image.shape[:2]} instead."
-        )
-
-    # Convert shapes to tensors
-    shape_source = tensor(image.shape)
-    shape_output = tensor(shape_output)
+    # Cast shapes to tuples
+    shape_source = tuple(image.shape)
+    shape_output = tuple(shape_output)
 
     # Create padded tensor
-    output = full(size=list(shape_output), fill_value=value_pad).type(image.type())
+    image_cropped = tt.full(
+        size=(*shape_source[:2], *shape_output),
+        fill_value=value_pad,
+        device=device,
+        dtype=image.dtype,
+    )
 
     # Calculate shape difference
-    difference = (shape_output - shape_source) / 2
-    # tensor([(y - x) / 2 for (x, y) in zip(shape_input, shape_output)])
-
-    # Arrange difference based on padding order
+    difference = [(x - y) / 2 for x, y in zip(shape_output, shape_source[2:])]
     if type_order == "before":
-        difference = difference.ceil().long()
+        difference = [math.ceil(d) for d in difference]
     elif type_order == "after":
-        difference = difference.floor().long()
-    else:
-        raise Exception(
-            f"Padding order {type_order} not implemented! Please contact the developers."
-        )
+        difference = [math.floor(d) for d in difference]
 
     # Generate corresponding indices for unpadded (source) and padded (output) tensors
-    diff_source = minimum(difference, tensor([0])).abs()
-    diff_output = maximum(difference, tensor([0]))
+    diff_source = [abs(min(d, 0)) for d in difference]
+    diff_output = [max(d, 0) for d in difference]
+
     idx_source = [
-        slice(dx, minimum(xs + 1, dx + ys))
-        for dx, ys, xs in zip(diff_source, shape_output, shape_source)
+        slice(dx, min(xs + 1, dx + ys))
+        for dx, ys, xs in zip(diff_source, shape_output, shape_source[2:])
     ]
     idx_output = [
-        slice(dy, minimum(ys + 1, dy + xs))
-        for dy, ys, xs in zip(diff_output, shape_output, shape_source)
+        slice(dy, min(ys + 1, dy + xs))
+        for dy, ys, xs in zip(diff_output, shape_output, shape_source[2:])
     ]
+    idx_source = [slice(None), slice(None)]
+    idx_output = [slice(None), slice(None)]
+    for dx, dy, xs, ys in zip(diff_source, diff_output, shape_source[2:], shape_output):
+        idx_source.append(slice(dx, min(xs + 1, dx + ys)))
+        idx_output.append(slice(dy, min(ys + 1, dy + xs)))
 
     # Populate padded tensor
-    output[idx_output] = image[idx_source]
+    image_cropped[idx_output] = image[idx_source]
 
-    # Return padded tensor
-    if type_output == "raw":
-        return output
+    # Return results
+    if type_output == "positional":
+        return image_cropped
     else:
-        return {"image": output}
+        return {"image": image_cropped}
 
 
 def get_midplanes(image, type_output="dict"):
