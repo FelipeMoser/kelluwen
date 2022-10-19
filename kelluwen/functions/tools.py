@@ -1,7 +1,10 @@
-import torch as tt
 from typeguard import typechecked
 from typing import Union, Dict, List, Tuple
 import math
+import torch as tt
+from .transforms import scale_features
+import matplotlib
+import matplotlib.pyplot as plt
 
 
 @typechecked
@@ -22,10 +25,10 @@ def centre_crop(
     shape_output : torch.Size, List[int]
         Output shape of cropped image. Must have the same number of spatial dimensions as the image.
 
-    value_pad: int, optional (default=0)
+    value_pad : int, optional (default=0)
         Value for padding regions outside initial image.
 
-    type_order: str, optional (default="after)
+    type_order : str, optional (default="after)
         This order defines which side will be padded more in the case that asymmetric padding is needed.
 
     type_output : str, optional (default="positional")
@@ -115,7 +118,7 @@ def get_midplanes(
 
     Returns
     -------
-    image_midplanes : List[torch.Tensor]
+    image_midplanes : Tuple[torch.Tensor]
     """
     # Validate arguments
     if image.dim() != 5:
@@ -135,119 +138,118 @@ def get_midplanes(
         return {"image_xy": image_xy, "image_xz": image_xz, "image_yz": image_yz}
 
 
+@typechecked
 def show_midplanes(
-    image, title="", show=True, type_coordinates="xyz", type_scaling=None
-):
+    image: tt.Tensor,
+    show: bool = True,
+    title: str = "",
+    type_coordinates: str = "xyz",
+    type_feature_scaling: str = "",
+    type_backend: str = "",
+    type_output: str = "positional",
+) -> None:
+    """Shows midplanes of image tensor
 
-    # Define supported coordinates type
-    supported_coordinates = ("ras", "xyz")
+    Parameters
+    ----------
+    image : torch.Tensor
+        Input image. Must be of shape (batch, channel, x, y, z).
 
-    # Define supported feature scaling type
-    supported_scaling = (None, "min_max", "mean_norm", "z_score", "unit_length")
+    title : str, optional (default="")
+        Title of figure.
 
-    # Check that coordinates type is supported
-    if type_coordinates not in supported_coordinates:
+    show : bool, optional (default=True)
+        Controls whether image should be shown or accumulated. When True, all accumulated images will be shown.
+
+    type_coordinates : str, optional (default="xyz")
+        Defines the axes orientation of the midplanes. Available: "xyz", "ras".
+
+    type_feature_scaling: str, optional (default="")
+        Defines whether the features of the midplanes should be scaled before showing. Available: "" (no scaling), "min_max", "mean_norm", "z_score", "unit_length".
+
+    type_backend: str, optional (default="")
+        Defines the backend to use for showing the midplanes. Available: "" (default), "web".
+
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
+
+    Returns
+    -------
+    image_midplanes : Tuple[torch.Tensor]
+    """
+    # Validate arguments
+    if image.dim() != 5:
+        raise ValueError(f"expected a 5D image, got {image.dim()!r}D instead")
+    if type_feature_scaling.lower() not in (
+        "",
+        "min_max",
+        "mean_norm",
+        "z_score",
+        "unit_length",
+    ):
         raise ValueError(
-            f"Unknown coordinates type '{type_coordinates}'. Supported types: {supported_coordinates}"
+            f"unknown value {type_feature_scaling!r} for type_feature_scaling"
         )
+    if type_backend.lower() not in ("", "web"):
+        raise ValueError(f"unknown value {type_backend!r} for type_backend")
 
-    # Check that feature scaling type is supported
-    if type_scaling not in supported_scaling:
-        raise ValueError(
-            f"Unknown feature scaling type '{type_scaling}'. Supported types: {supported_scaling}"
-        )
-
-    # Check title
-    if title is not None:
-        if not isinstance(title, str):
-            raise TypeError(f"Title must be a string, got {type(title)} instead.")
-
-    # Check show
-    if not isinstance(show, bool):
-        raise TypeError(f"Show must be a boolean, got {type(show)} instead.")
+    if type_coordinates.lower() not in ("xyz", "ras"):
+        raise ValueError(f"unknown value {type_coordinates!r} for type_coordinates")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
 
     # Get midplanes
-    midplanes = get_midplanes(image.detach().cpu())
-    keys = ("xy", "xz", "yz")
-    xy, xz, yz = [midplanes[x] for x in keys]
+    images = get_midplanes(image.detach().cpu())
 
     # Scale features if required
-    if type_scaling != None:
-        xy = scale_features(image=xy, type_scaling=type_scaling)["image"]
-        xz = scale_features(image=xz, type_scaling=type_scaling)["image"]
-        yz = scale_features(image=yz, type_scaling=type_scaling)["image"]
+    if type_feature_scaling != "":
+        images = [
+            scale_features(image=img, type_scaling=type_feature_scaling)
+            for img in images
+        ]
 
-    # Remove batch and channel dimensions
-    xy, xz, yz = xy[0, 0], xz[0, 0], yz[0, 0]
+    # Remove batch and channel dimensions if required
+    images = [img[0, 0] for img in images]
 
     # Create figure
     if type_coordinates == "ras":
-        xy, xz, yz = [xy.T, xz.T, yz.T]
-    height_figure = tensor([x.shape[0] for x in (xy, xz, yz)]).max()
-    width_figure = tensor([x.shape[1] for x in (xy, xz, yz)]).sum()
-    shape_figure = tensor([width_figure, height_figure])
-    shape_figure = shape_figure / shape_figure.max() * 15
+        images = [img.T for img in images]
+    height_figure = max(img.shape[0] for img in images)
+    width_figure = sum(img.shape[1] for img in images)
+    shape_figure = [width_figure, height_figure]
+    shape_figure = [x / max(shape_figure) * 15 for x in shape_figure]
+
+    # Plot midplanes
+    if type_backend != "":
+        matplotlib.use(type_backend)
     fig, axs = plt.subplots(
         nrows=1,
         ncols=3,
         figsize=shape_figure,
-        gridspec_kw=dict(width_ratios=[x.shape[1] for x in (xy, xz, yz)]),
+        gridspec_kw=dict(width_ratios=([img.shape[1] for img in images])),
         subplot_kw=dict(anchor="NW"),
         tight_layout=True,
     )
     fig.suptitle(title)
     fig.tight_layout()
-
-    # Plot midplanes
     if type_coordinates == "xyz":
-        axs[0].imshow(xy, cmap="gray", origin="upper")
-        axs[0].set(title="XY", xlabel="Y", ylabel="X")
-        axs[0].set(xticks=[0, xy.shape[1] - 1], yticks=[0, xy.shape[0] - 1])
-        axs[1].imshow(xz, cmap="gray", origin="upper")
-        axs[1].set(title="XZ", xlabel="Z", ylabel="X")
-        axs[1].set(xticks=[0, xz.shape[1] - 1], yticks=[0, xz.shape[0] - 1])
-        axs[2].imshow(yz, cmap="gray", origin="upper")
-        axs[2].set(title="YZ", xlabel="Z", ylabel="Y")
-        axs[2].set(xticks=[0, yz.shape[1] - 1], yticks=[0, yz.shape[0] - 1])
+        for i, (img, axes) in enumerate(zip(images, ["XY", "XZ", "YZ"])):
+            axs[i].imshow(img, cmap="gray", origin="upper")
+            axs[i].set(xticks=[0, img.shape[1] - 1], yticks=[0, img.shape[0] - 1])
+            axs[i].set(title=axes, xlabel=axes[1], ylabel=axes[0])
 
     elif type_coordinates == "ras":
-        axs[0].imshow(xy, cmap="gray", origin="lower")
-        axs[0].set(xlim=axs[0].get_xlim()[::-1], xticks=[], yticks=[])
-        axs[0].set_xlabel("P", ha="center")  # Bottom
-        axs[0].set_ylabel("R", rotation=0, va="center")  # Left
-        axx0 = axs[0].secondary_xaxis("top")
-        axx0.set_xlabel(xlabel="A", ha="center")  # Top
-        axx0.set_xticks([])
-        axy0 = axs[0].secondary_yaxis("right")
-        axy0.set_ylabel("L", rotation=0, va="center")  # Right
-        axy0.set_yticks([])
-
-        axs[1].imshow(xz, cmap="gray", origin="lower")
-        axs[1].set(xlim=axs[1].get_xlim()[::-1], xticks=[], yticks=[])
-        axs[1].set_xlabel("I", ha="center")  # Bottom
-        axs[1].set_ylabel("R", rotation=0, va="center")  # Left
-        axx1 = axs[1].secondary_xaxis("top")
-        axx1.set_xlabel(xlabel="S", ha="center")  # Top
-        axx1.set_xticks([])
-        axy1 = axs[1].secondary_yaxis("right")
-        axy1.set_ylabel("L", rotation=0, va="center")  # Right
-        axy1.set_yticks([])
-
-        axs[2].imshow(yz, cmap="gray", origin="lower")
-        axs[2].set(xlim=axs[2].get_xlim()[::-1], xticks=[], yticks=[])
-        axs[2].set_xlabel("I", ha="center")  # Bottom
-        axs[2].set_ylabel("A", rotation=0, va="center")  # Left
-        axx2 = axs[2].secondary_xaxis("top")
-        axx2.set_xlabel(xlabel="S", ha="center")  # Top
-        axx2.set_xticks([])
-        axy2 = axs[2].secondary_yaxis("right")
-        axy2.set_ylabel("P", rotation=0, va="center")  # Right
-        axy2.set_yticks([])
-
-    else:
-        raise Exception(
-            f"Coordinates type {type_coordinates} not implemented! Please contact the developers."
-        )
+        for i, (img, axes) in enumerate(zip(images, ["PRAL", "IRSL", "IASP"])):
+            axs[i].imshow(img, cmap="gray", origin="lower")
+            axs[i].set(xlim=axs[i].get_xlim()[::-1], xticks=[], yticks=[])
+            axs[i].set_xlabel(axes[0], ha="center")
+            axs[i].set_ylabel(axes[1], rotation=0, va="center")
+            axx1 = axs[i].secondary_xaxis("top")
+            axx1.set_xlabel(axes[2], ha="center")
+            axx1.set_xticks([])
+            axx1 = axs[i].secondary_yaxis("right")
+            axx1.set_ylabel(axes[3], rotation=0, va="center")
+            axx1.set_yticks([])
 
     # Show if required
     if show:
