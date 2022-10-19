@@ -98,37 +98,41 @@ def centre_crop(
         return {"image": image_cropped}
 
 
-def get_midplanes(image, type_output="dict"):
-    # Define supported output types
-    supported_output = ("dict", "raw")
+@typechecked
+def get_midplanes(
+    image: tt.Tensor,
+    type_output: str = "positional",
+) -> Union[Tuple, Dict[str, tt.Tensor]]:
+    """Returns midplanes of image tensor
 
-    # Check that output type is supported
-    if type_output not in supported_output:
-        raise ValueError(
-            f"Unknown output type '{type_output}'. Supported types: {supported_output}"
-        )
+    Parameters
+    ----------
+    image : torch.Tensor
+        Input image. Must be of shape (batch, channel, x, y, z).
 
-    # Check input image
-    if not isinstance(image, Tensor):
-        raise TypeError(f"Image must be a tensor, got {type(image)} instead.")
-    elif image.dim() != 5:
-        raise ValueError(
-            f"Image must be a 5D tensor of shape BxCxDxHxW, got a {image.dim()}D tensor instead."
-        )
+    type_output : str, optional (default="positional")
+        Determines how the outputs are returned. If set to "positional", it returns positional outputs. If set to "named", it returns a dictionary with named outputs.
 
-    # Get volume shape
-    idx = (tensor(image.shape) / 2).floor().long()
+    Returns
+    -------
+    image_midplanes : List[torch.Tensor]
+    """
+    # Validate arguments
+    if image.dim() != 5:
+        raise ValueError(f"expected a 5D image, got {image.dim()!r}D instead")
+    if type_output.lower() not in ("positional", "named"):
+        raise ValueError(f"unknown value {type_output!r} for type_output")
 
     # Get midplanes
-    xy = image[:, :, :, :, idx[4]]
-    xz = image[:, :, :, idx[3], :]
-    yz = image[:, :, idx[2], :, :]
+    image_xy = image[..., image.shape[-1] // 2]
+    image_xz = image[..., image.shape[-2] // 2, :]
+    image_yz = image[..., image.shape[-3] // 2, :, :]
 
-    # Return midplanes
-    if type_output == "raw":
-        return xy, xz, yz
+    # Return results
+    if type_output == "positional":
+        return image_xy, image_xz, image_yz
     else:
-        return {"xy": xy, "xz": xz, "yz": yz}
+        return {"image_xy": image_xy, "image_xz": image_xz, "image_yz": image_yz}
 
 
 def show_midplanes(
