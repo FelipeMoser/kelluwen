@@ -221,7 +221,8 @@ def show_midplanes(
 
     # Plot midplanes
     if type_backend != "":
-        matplotlib.use(type_backend)
+        if type_backend.lower() == "web":
+            matplotlib.use(type_backend)
     fig, axs = plt.subplots(
         nrows=1,
         ncols=3,
